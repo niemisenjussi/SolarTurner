@@ -61,7 +61,7 @@ TARGET = test
 
 
 # List C source files here. (C dependencies are automatically generated.)
-SRC = $(TARGET).c USART.c ADC.c motorctrl.c # avr_f64.c nmea.c
+SRC = $(TARGET).c USART.c ADC.c motorctrl.c serialparser.c # avr_f64.c nmea.c
 
 
 # List Assembler source files here.

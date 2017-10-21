@@ -5,7 +5,10 @@
 
 
 void initMotor(void);
-uint16_t getAngle(uint8_t actuator);
+uint16_t getAngle(void);
+uint16_t getTilt(void);
+void setAngle(uint16_t angle);
+void setTilt(uint16_t tilt);
 void motorController(void);
 void motorControlLoop(uint8_t motor);
 void motorControl(uint8_t motor, uint8_t dir, uint8_t pwm);
