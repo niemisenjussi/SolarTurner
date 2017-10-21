@@ -1,6 +1,7 @@
 #include "serialparser.h"
 #include "ADC.h"
 #include "USART.h"
+#include "motorctrl.h"
 #include <avr/io.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,11 +21,6 @@ volatile uint8_t ring_read = 0;
 volatile char buffer[BUFSIZE+1];
 
 FILE *port; //Serialport to host machine
-
-//Pointers to global angle and tilt variables
-volatile uint16_t *set_angle;
-volatile uint16_t *set_tilt;
-
 
 __attribute__((always_inline)) inline static void clearBuffer(volatile char *buffer,uint8_t len){
 	for(uint8_t i=0;i<len;i++){	*buffer++ = '\0';}
@@ -52,11 +48,9 @@ void read_until_line_end(void){
     Initializes serialport and clears ring buffer
     This function also takes angle and tilt global variable pointer where set angle values are stored 
 */
-void initSerialParser(FILE *serialport, volatile uint16_t *angle, volatile uint16_t *tilt){
+void initSerialParser(FILE *serialport){
     port = serialport;
     clearBuffer(buffer, BUFSIZE);
-    set_angle = angle; //Set angle and tilt pointers, these are pointers
-    set_tilt = tilt;
 }
 
 /*
@@ -112,11 +106,15 @@ void parseCommands(void){
             if (buffer[ring_read] == '1'){    
                 uint8_t succ = findParameter(':', ':', '\n', 20, &start, &stop);
                 if (succ == FIND_SUCCESS){
-                    *set_angle = readInt16(start, stop);
+                    setAngle(readInt16(start, stop));
                     succ = findParameter(':', ':', '\n', 20, &start, &stop);
-
-                    *set_tilt = readInt16(start, stop);
-                    fprintf(port,"OK\n");
+                    if (succ == FIND_SUCCESS){
+                        setTilt(readInt16(start, stop));
+                        fprintf(port,"OK\n");
+                    }
+                    else{
+                        fprintf(port, "ERR\n");
+                    }
                 }
                 else{
                     fprintf(port,"ERR\n");
@@ -132,8 +130,11 @@ void parseCommands(void){
             if (value == '1'){ //Rread generic info
                 fprintf(port,"G1:%d\n", SW_VERSION);
             }
-            else if (value == '2'){ //Read current angle and tilt
-                fprintf(port,"G2:%d:%d\n", *set_angle, *set_tilt);
+            else if (value == '2'){ //Read current angle and tilt set_values
+                fprintf(port,"G2:%d:%d\n", getSetAngle(), getSetTilt());
+            }
+            else if (value == '3'){ //Reads current values from motorctrl -module, actual values
+                fprintf(port,"G3:%d:%d\n", getAngle(), getTilt());
             }
             else{
                 fprintf(port,"ERR\n");

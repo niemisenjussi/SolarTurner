@@ -128,6 +128,22 @@ void setTilt(uint16_t tilt){
 }
 
 /*
+    Returns current Angle Set value
+*/
+uint16_t getSetAngle(void){
+    return motor_set_position[ANGLE_MOTOR];
+}
+
+/*
+    Returns current Tilt Set value  
+*/
+uint16_t getSetTilt(void){
+    return motor_set_position[TILT_MOTOR];
+}
+
+
+
+/*
     This function controls angle and tilt motors
     It reads actual Angle and Tilt values using ADC
     Then it Adjust motor PWM to correct direction and leaves it there.
@@ -170,11 +186,12 @@ void motorControl(uint8_t motor, uint8_t dir, uint8_t pwm){
             while(motor_current_pwm[motor] != pwm){ //Loop until set is equal
                 if ((motor_current_pwm[motor] + motor_acceleration_step[motor]) > motor_max_pwm[motor]){
                     motor_current_pwm[motor] = motor_max_pwm[motor];
+                    pwm = motor_max_pwm[motor];
                 }
                 else{
                     motor_current_pwm[motor] += motor_acceleration_step[motor];
                 }
-                setMotor(motor, dir, pwm);
+                setMotor(motor, dir, motor_current_pwm[motor]);
                 delayLoop_us(motor_acceleration_time[motor]);
             }
         }
@@ -186,7 +203,7 @@ void motorControl(uint8_t motor, uint8_t dir, uint8_t pwm){
                 else{
                     motor_current_pwm[motor] += motor_deacceleration_step[motor];
                 }
-                setMotor(motor, dir, pwm);
+                setMotor(motor, dir, motor_current_pwm[motor]);
                 delayLoop_us(motor_deacceleration_time[motor]);
             }
         }

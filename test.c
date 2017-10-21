@@ -10,8 +10,6 @@
 #include "serialparser.h"
 
 FILE port;
-volatile uint16_t set_angle = 0; //
-volatile uint16_t set_tilt = 0;
 
 //Debug led control for seeing that main loop is running
 #define LED_DDR DDRB
@@ -46,17 +44,13 @@ int main (int argc, char *argv[])
 	USART0_Flush();
     initADC();
     initMotor();
-	initSerialParser(&port, &set_angle, &set_tilt);
+	initSerialParser(&port);
     
     initSystemTimer(); //Starts all timers which are used => GTCCR = 0x00;
     sei();
 
 	while(1){
 		DISABLE_LED
-
-        //Set angle and set tilt -variables are updated inside SerialParser -functions
-        setAngle(set_angle);
-        setTilt(set_tilt);
 
         motorController();
         _delay_ms(1);
