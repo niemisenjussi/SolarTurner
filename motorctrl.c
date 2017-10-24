@@ -1,147 +1,201 @@
 #include "motorctrl.h"
 #include "ADC.h"
 
-
 // Forward and backward definition, can be changed
 #define FORWARD 1
 #define BACKWARD 0
 
-//Motor physical connections and PWM settings
-#define MOTOR_A 0
-#define MOTOR_A_FWD_PORT PORTD //OC0A PD6
-#define MOTOR_A_FWD_DIR  DDRD 
-#define MOTOR_A_FWD_PIN  6
-#define MOTOR_A_FWD_COUNTER 0x80 + 0x03  //OC0A clear on compare match + Fast PWM
+#define FAST_PWM 0x03
+#define OC0A 0x80
+#define OC0B 0x20
+#define OC2A 0x80
+#define OC2B 0x20
 
-#define MOTOR_A_RWD_PORT PORTD // 0C0B PD5
-#define MOTOR_A_RWD_DIR  DDRD 
-#define MOTOR_A_RWD_PIN  5
-#define MOTOR_A_RWD_COUNTER 0x20 + 0x03 //OC0B clear on compare match + Fast PWM
-
-#define MOTOR_A_ENABLE_PORT PORTD //PD7 PCINT23/AIN1
-#define MOTOR_A_ENABLE_DIR  DDRD
-#define MOTOR_A_ENABLE_PIN  7
-
-
-#define MOTOR_B 1
-#define MOTOR_B_FWD_PORT PORTB //OC2A PB3 
-#define MOTOR_B_FWD_DIR  DDRB 
-#define MOTOR_B_FWD_PIN  3
-#define MOTOR_B_FWD_COUNTER 0x80 + 0x03// OC4B Clear on compare match + Fast PWM
-
-#define MOTOR_B_RWD_PORT PORTD //OC2B PD3
-#define MOTOR_B_RWD_DIR  DDRD
-#define MOTOR_B_RWD_PIN  3
-#define MOTOR_B_RWD_COUNTER 0x20 + 0x03// OC2B Clear on compare match + Fast PWM
-
-#define MOTOR_B_ENABLE_PORT PORTB //PB4 MISO PIN
-#define MOTOR_B_ENABLE_DIR  DDRB
-#define MOTOR_B_ENABLE_PIN  4
-
-
-
+#define SHUTDOWN 0 //shutdown motor
 #define ANGLE_MAX_PWM 200 //Angle motor
 #define TILT_MAX_PWM 200 //Tilt MOTOR
-
 #define PRESCALER 0x04 //PWM frequency divider
-#define NUMOFSAMPLES 8 //ADC averaging sample count
+#define NUMOFSAMPLES 4 //ADC averaging sample count
 
-#define MOTOR_HYSTERESIS 2 //IN Degrees
+#define MOTOR_HYSTERESIS 2.0  //IN Degrees
 #define MOTOR_ACCELERATION 5000 //wait time in micro seconds between speed increase
 #define MOTOR_ACC_STEP 1 //8bit PWM step per acceleration.
 
-#define MIN_ANGLE 90
-#define ANGLE_RANGE 160
-#define MIN_TILT 0
-#define TILT_RANGE 80
+//SET limits for the API
+#define MIN_ANGLE 100.0
+#define ANGLE_RANGE 160.0
+#define MIN_TILT 5.0
+#define TILT_RANGE 85.0
 
-//Define which motor is used for tilting and which for angular movements
-#define ANGLE_MOTOR MOTOR_A
-#define TILT_MOTOR  MOTOR_B
+#define ANGLE_REFERENCE 180.0 //heading by default South
+#define TILT_REFERENCE 5.0   //Tilted 5 degrees upward frow vertical angle
 
+#define ANGLE_MOTOR_TIMEOUT 15000 // in milliseconds
+#define TILT_MOTOR_TIMEOUT 15000  // in milliseconds
+
+//Angle correction factors, all values are millimeters
+#define ANGLE_X 700L //Distance from center to actuator lower point
+#define ANGLE_C 190L //Distance from center to actuator far end
+#define ANGLE_Y 50L  //Offset distance from X to outside
+
+#define TILT_X 540L //Distance from center to actuator lower point
+#define TILT_C 170L //Distance from center to actuator far end
+#define TILT_Y 50L  //Offset distance from X to outside
+
+//Define Actuator physical measurements
+#define ACTUATOR_A_MIN_LENGTH 515L //absolute value
+#define ACTUATOR_A_MAX_LENGTH 890L //absolute value
+#define ACTUATOR_A_MIN_LIMIT  520L //Minimum limit where actuator can go
+#define ACTUATOR_A_MAX_LIMIT  880L //Maximum limit where actuator can go
+
+#define ACTUATOR_B_MIN_LENGTH 340L  //375 515-890               //pidempi
+#define ACTUATOR_B_MAX_LENGTH 540L  //200 340-540 pisimmällään  //lyhyempi
+#define ACTUATOR_B_MIN_LIMIT  350L
+#define ACTUATOR_B_MAX_LIMIT  530L
+
+#define MOTOR_A 0
+#define MOTOR_B 1
 //Define Actuator ADC Channels for Motor_A and Motor_b
+
 #define ACTUATOR_ADC_A 2
 #define ACTUATOR_ADC_B 3
-
 //Defines which actuator is controlling tilt and which controls angular movements
+
+#define ANGLE_MOTOR MOTOR_A
+#define TILT_MOTOR MOTOR_B 
+
 #define ANGLE_ACTUATOR ACTUATOR_ADC_A
 #define TILT_ACTUATOR  ACTUATOR_ADC_B
 
-uint8_t motor_adc_mapping[2] =            {0, 0}; //Map motor to correct ADC channel
-uint8_t actuator_to_motor_mapping[8] =    {0, 0, 0, 0, 0, 0, 0, 0}; //Slots for 8 ADC positions
-volatile uint8_t motor_current_pwm[2] =   {0, 0};
-volatile uint8_t motor_current_dir[2] =   {0, 0};
-volatile uint16_t motor_current_position[2] = {0, 0};
-volatile uint16_t motor_set_position[2] = {0, 0}; //Initial position is set to midway.
-uint16_t motor_acceleration_step[2] =     {MOTOR_ACC_STEP, MOTOR_ACC_STEP};
-uint16_t motor_deacceleration_step[2] =   {MOTOR_ACC_STEP, MOTOR_ACC_STEP};
-uint16_t motor_acceleration_time[2] =     {MOTOR_ACCELERATION, MOTOR_ACCELERATION};
-uint16_t motor_deacceleration_time[2] =   {MOTOR_ACCELERATION, MOTOR_ACCELERATION};
-uint8_t motor_angle_hysteresis[2] =       {MOTOR_HYSTERESIS, MOTOR_HYSTERESIS}; //motor hysteresis in degrees
-uint8_t motor_max_pwm[2] =                {200, 200};
-uint16_t motor_angle_min[2] =             {0, 0}; //miminum possible angle for this motor
-uint16_t motor_angle_range[2] =           {0, 0}; //possible angle range from min to max/*  
+#define ANGLE_ACTUATOR_MIN_LENGTH ACTUATOR_A_MIN_LENGTH
+#define ANGLE_ACTUATOR_MAX_LENGTH ACTUATOR_A_MAX_LENGTH
+#define ANGLE_ACTUATOR_MIN_LIMIT ACTUATOR_A_MIN_LIMIT
+#define ANGLE_ACTUATOR_MAX_LIMIT ACTUATOR_A_MAX_LIMIT
 
-/*
-    Converts ADC voltage to actuator angle
-    This function is responsible to converting nonlinear actuator movement to angle
-*/
-uint16_t getAngle(void){
-    uint16_t voltage = AVGVoltage(ANGLE_ACTUATOR, 0x40, NUMOFSAMPLES);
-                    // 25 + (180 - 25) = (155 / 1024) => 0.15136 * voltage = >
-    uint16_t angle = motor_angle_min[actuator_to_motor_mapping[ANGLE_ACTUATOR]] + ((motor_angle_range[actuator_to_motor_mapping[ANGLE_ACTUATOR]] / 1024) * voltage); //volts per degree
-    //motor_current_position[actuator] = angle; //actuator is ADC position => 2 or 3 so array position is also 2 or 3   
-    return angle;
+#define TILT_ACTUATOR_MIN_LENGTH ACTUATOR_B_MIN_LENGTH
+#define TILT_ACTUATOR_MAX_LENGTH ACTUATOR_B_MAX_LENGTH
+#define TILT_ACTUATOR_MIN_LIMIT ACTUATOR_B_MIN_LIMIT
+#define TILT_ACTUATOR_MAX_LIMIT ACTUATOR_B_MAX_LIMIT
+
+
+//Initialize MOTOR A, Angle motor
+//volatile motor motors[NUM_OF_MOTORS];
+//extern motor motors[NUM_OF_MOTORS];
+
+//returns motor final calculated position in degrees
+float getMotorPosition(motor *m){
+    float alen = getActuatorLength(m);
+    float aoffset = m->angle_correction(alen);
+    return m->angle_reference + aoffset;
+    /*
+        example reference angle motor = 180
+        aoffset between -90 to 90
+        -90 when actuator is minimum position
+        90 when actuator is at max position
+
+        ie. 180 + offset => 180 + -90 = 90  degrees
+        ie. 180 +offset  => 180 + +90 = 270 degrees
+    */
 }
 
-/*
-    Converts ADC voltage to actuator tilt
-    This function is responsible to converting nonlinear actuator movement to angle
-*/
-uint16_t getTilt(void){
-    uint16_t voltage = AVGVoltage(TILT_ACTUATOR, 0x40, NUMOFSAMPLES);
+//returns motor actuator length in millimeters
+uint16_t getActuatorLength(motor *m){
+    uint16_t voltage = AVGVoltage(m->adc_channel, 0x40, NUMOFSAMPLES);
                     // 25 + (180 - 25) = (155 / 1024) => 0.15136 * voltage = >
-    uint16_t tilt = motor_angle_min[actuator_to_motor_mapping[TILT_ACTUATOR]] + ((motor_angle_range[actuator_to_motor_mapping[TILT_ACTUATOR]] / 1024) * voltage); //volts per degree
-    //motor_current_position[actuator] = angle; //actuator is ADC position => 2 or 3 so array position is also 2 or 3   
-    return tilt;
+    uint16_t length =  m->actuator_min_length + (((m->actuator_max_length-m->actuator_min_length) / 1024) * voltage); //volts per degree
+    
+    if (length >= m->actuator_max_limit){
+        m->status = MAX_LIMIT;
+        motorControl(m, FORWARD, SHUTDOWN); //SHUTDOWN motor
+        //TODO do something when limits are crossed
+    }
+    else if(length <= m->actuator_min_limit){
+        m->status = MIN_LIMIT;
+        motorControl(m, FORWARD, SHUTDOWN);  //SHUTDOWN motor
+    }
+    
+    return length;
+
+    //m->current_position[actuator] = angle; //actuator is ADC position => 2 or 3 so array position is also 2 or 3   
 }
 
+
+//Returns angle between -90.0 - 90.0, valid input range 30.0 - 50.0. This is converted to whole range.
+float angleConversion(uint16_t f){
+    return -(360*atan((2*ANGLE_C*ANGLE_X-sqrt((-ANGLE_C*ANGLE_C + 2*ANGLE_C*f - pow(f,2.0) + ANGLE_X*ANGLE_X + ANGLE_Y*ANGLE_Y)*
+            (ANGLE_C*ANGLE_C + 2*ANGLE_C*f + pow(f,2.0)- ANGLE_X*ANGLE_X - ANGLE_Y*ANGLE_Y)))/
+            (ANGLE_C*ANGLE_C + 2*ANGLE_C*ANGLE_Y - pow(f,2.0) + ANGLE_X*ANGLE_X + ANGLE_Y*ANGLE_Y)))/M_PI;
+}
+
+//Returns tilt angle between 0 to 90 degrees positive, valid input range 41.0 - 60.0 => This is converted to 5 - 90 degrees. 0 => means panel is vertical, 90 => panel is horizontal 
+float tiltConversion(uint16_t f){
+    return 90-(360*atan((2*TILT_C*TILT_X-sqrt((-TILT_C*TILT_C + 2*TILT_C*f - pow(f,2.0) + TILT_X*TILT_X + TILT_Y*TILT_Y)*
+              (TILT_C*TILT_C + 2*TILT_C*f + pow(f,2.0)- TILT_X*TILT_X - TILT_Y*TILT_Y)))/
+              (TILT_C*TILT_C + 2*TILT_C*TILT_Y - pow(f,2.0) + TILT_X*TILT_X + TILT_Y*TILT_Y)))/M_PI;
+}
+
+
+float getAngle(void){
+    return motors[ANGLE_MOTOR].current_position;
+}
+
+float getTilt(void){
+    return motors[TILT_MOTOR].current_position;
+}
 
 /*
     This function is used to set wanted Angle value
 */
-void setAngle(uint16_t angle){
-    //vefify that angle is in between valid range
-    if (angle >= motor_angle_min[ANGLE_MOTOR] && angle <= (motor_angle_min[ANGLE_MOTOR] + motor_angle_range[ANGLE_MOTOR])){
-        motor_set_position[ANGLE_MOTOR] = angle;
-    }
+uint8_t setAngle(float angle){
+    return setMotorPosition(&motors[ANGLE_MOTOR], angle);
 }
 
 /*
     This function is used to set wanted TILT angle
 */
-void setTilt(uint16_t tilt){
-    //vefify that angle is in between valid range
-    if (tilt >= motor_angle_min[TILT_MOTOR] && tilt <= (motor_angle_min[TILT_MOTOR] + motor_angle_range[TILT_MOTOR])){
-        motor_set_position[TILT_MOTOR] = tilt;
-    }
+uint8_t setTilt(float tilt){
+    return setMotorPosition(&motors[TILT_MOTOR], tilt);
 }
+
+uint8_t setMotorPosition(motor *m, float angle){
+    //vefify that angle is in between valid range
+    if (angle >= m->min_angle && angle <= (m->min_angle + m->angle_range)){
+        m->set_position = angle;
+        m->timeout_value = 0; //Clear timeout value on every angle change
+        return 0;
+    }
+    else{
+        return 1;
+    }
+}   
 
 /*
     Returns current Angle Set value
 */
-uint16_t getSetAngle(void){
-    return motor_set_position[ANGLE_MOTOR];
+float getSetAngle(void){
+    return motors[ANGLE_MOTOR].set_position;
 }
 
 /*
     Returns current Tilt Set value  
 */
-uint16_t getSetTilt(void){
-    return motor_set_position[TILT_MOTOR];
+float getSetTilt(void){
+    return motors[TILT_MOTOR].set_position;
 }
 
+/*
+    Returns Angle motor status  
+*/
+motor_status getAngleMotorStatus(void){
+    return motors[ANGLE_MOTOR].status;
+}
 
+/*
+    Returns Tilt motor status,   
+*/
+motor_status getTiltMotorStatus(void){
+    return motors[TILT_MOTOR].status;
+}
 
 /*
     This function controls angle and tilt motors
@@ -149,27 +203,41 @@ uint16_t getSetTilt(void){
     Then it Adjust motor PWM to correct direction and leaves it there.
     This function must be called n. times per second
 */
-void motorController(void){
+motor_status motorController(void){
     //Update current motor positions
-    motor_current_position[ANGLE_MOTOR] = getAngle();
-    motor_current_position[TILT_MOTOR] = getTilt();
-
-    //Set new PWM values based on set and actual position
-    motorControlLoop(ANGLE_MOTOR);
-    motorControlLoop(TILT_MOTOR);
+    uint8_t status = 0;
+    for (uint8_t i = 0; i < NUM_OF_MOTORS; i++){
+        motors[i].current_position = getMotorPosition(&motors[i]); 
+        motorControlLoop(&motors[i]);
+        status += motors[i].status; //Collect status from all motors
+    }
+    return status;
 }
 
 //This is motorcontrol loop which is called n. times per second.
-void motorControlLoop(uint8_t motor){    
-    //Update ACTUATOR position
-    if (motor_set_position[motor] > motor_current_position[motor] + motor_angle_hysteresis[motor]){
-        motorControl(motor, FORWARD, motor_max_pwm[motor]);
+void motorControlLoop(motor *m){    
+    //Check if we have been running too long
+    if (m->timeout_value >= m->timeout_setting){
+        m->status = TIMEOUT_ERROR;
+        motorControl(m, BACKWARD, 0); //Shutdown motor if it has been running too long.
+        return;
     }
-    else if (motor_set_position[motor] < motor_current_position[motor] - motor_angle_hysteresis[motor]){
-        motorControl(motor, BACKWARD, motor_max_pwm[motor]);
+
+    //Set position is higher than current
+    if (m->set_position > m->current_position + m->angle_hysteresis && m->status != MAX_LIMIT){ //Check that we are not overriding motor
+        motorControl(m, FORWARD, m->max_pwm);
+        m->timeout_value ++; //update timeout variables
+        m->status = RUNNING_FORWARD;
     }
-    else{
-        motorControl(motor, BACKWARD, 0);
+    else if (m->set_position < m->current_position - m->angle_hysteresis && m->status != MIN_LIMIT){
+        motorControl(m, BACKWARD, m->max_pwm);
+        m->timeout_value ++;
+        m->status = RUNNING_BACKWARD;
+    }
+    else{ //Motor is close enough wanted position, Shutdown motor
+        motorControl(m, BACKWARD, 0);
+        m->timeout_value = 0; //Clear timeout
+        m->status = STATUS_OK;
     }
 }
 
@@ -179,158 +247,178 @@ void delayLoop_us(uint16_t delay){
     }
 }
 
-void motorControl(uint8_t motor, uint8_t dir, uint8_t pwm){
+void motorControl(motor *m, uint8_t dir, uint8_t pwm){
     // We can directly control motor if direction is correct or motor is stopped
-    if (motor_current_dir[motor] == dir || motor_current_pwm[motor] == 0){
-        if (motor_current_pwm[motor] < pwm){ //Need to accelerate
-            while(motor_current_pwm[motor] != pwm){ //Loop until set is equal
-                if ((motor_current_pwm[motor] + motor_acceleration_step[motor]) > motor_max_pwm[motor]){
-                    motor_current_pwm[motor] = motor_max_pwm[motor];
-                    pwm = motor_max_pwm[motor];
+    if (m->current_dir == dir || m->current_pwm == 0){
+        if (m->current_pwm < pwm){ //Need to accelerate
+            while(m->current_pwm != pwm){ //Loop until set is equal
+                if ((m->current_pwm + m->acceleration_step) > m->max_pwm){
+                    m->current_pwm = m->max_pwm;
+                    pwm = m->max_pwm;
                 }
                 else{
-                    motor_current_pwm[motor] += motor_acceleration_step[motor];
+                    m->current_pwm += m->acceleration_step;
                 }
-                setMotor(motor, dir, motor_current_pwm[motor]);
-                delayLoop_us(motor_acceleration_time[motor]);
+                setMotor(m, dir, m->current_pwm);
+                delayLoop_us(m->acceleration_time);
             }
         }
         else{
-            while(motor_current_pwm[motor] != pwm){ //Loop until set is equal
-                if (motor_current_pwm[motor] - motor_deacceleration_step[motor] <= 0){
-                    motor_current_pwm[motor] = 0;
+            while(m->current_pwm != pwm){ //Loop until set is equal
+                if (m->current_pwm - m->deacceleration_step <= 0){
+                    m->current_pwm = 0;
                 }
                 else{
-                    motor_current_pwm[motor] += motor_deacceleration_step[motor];
+                    m->current_pwm += m->deacceleration_step;
                 }
-                setMotor(motor, dir, motor_current_pwm[motor]);
-                delayLoop_us(motor_deacceleration_time[motor]);
+                setMotor(m, dir, m->current_pwm);
+                delayLoop_us(m->deacceleration_time);
             }
         }
     }
     else{ //Motor is going so it need to stop before direction change
-        setMotor(motor, motor_current_dir[motor], 0);
-        motorControl(motor, dir, pwm); // Call recursively this function again when motor is stopped.
+        setMotor(m, m->current_dir, 0);
+        motorControl(m, dir, pwm); // Call recursively this function again when motor is stopped.
     }
 }
 
 
 void initMotor(void){
-    //Init min/max values and map Correct motor to correct actuator. 
-    motor_adc_mapping[ANGLE_MOTOR] = ANGLE_ACTUATOR;
-    motor_adc_mapping[TILT_MOTOR]  = TILT_ACTUATOR;
-    actuator_to_motor_mapping[ANGLE_ACTUATOR] = ANGLE_MOTOR;
-    actuator_to_motor_mapping[TILT_ACTUATOR]  = TILT_MOTOR;
-    motor_set_position[ANGLE_MOTOR] = (motor_angle_min[ANGLE_MOTOR]+motor_angle_range[ANGLE_MOTOR]/2);
-    motor_set_position[TILT_MOTOR]  = (motor_angle_min[TILT_MOTOR]+motor_angle_range[TILT_MOTOR]/2);
-    motor_max_pwm[ANGLE_MOTOR] = ANGLE_MAX_PWM;
-    motor_max_pwm[TILT_MOTOR]  = TILT_MAX_PWM;
-    motor_angle_min[ANGLE_MOTOR] = MIN_ANGLE;
-    motor_angle_min[TILT_MOTOR] = MIN_TILT;
-    motor_angle_range[ANGLE_MOTOR] = ANGLE_RANGE;
-    motor_angle_range[TILT_MOTOR]  = TILT_RANGE;
+    motor m1 =
+    {
+         &PORTD, &DDRD, 6, &TCCR0A, (OC0B + FAST_PWM), &TCCR0B, 0x00, &OCR0A, //MOTOR A FORWARD
+         &PORTD, &DDRD, 5, &TCCR0A, (OC0A + FAST_PWM), &TCCR0B, 0x00, &OCR0B, //MOTOR A REVERSE
+         &PORTD, &DDRD, 7, //MOTOR Enable control
+         ANGLE_ACTUATOR,
+         0.0,       //Current position
+         FORWARD,   //current dir
+         0.0,       //current position
+         MIN_ANGLE + (ANGLE_RANGE / 2), //Set position, half way
+         MOTOR_ACC_STEP,     //Acceleration step
+         MOTOR_ACC_STEP,     //Deacceleration step
+         MOTOR_ACCELERATION, //Acceleration time
+         MOTOR_ACCELERATION, //deacceleration time
+         MOTOR_HYSTERESIS,   //Anglular hysteresis in degrees
+         ANGLE_MAX_PWM,      //MAX pwm value for anglular movements
+         MIN_ANGLE,          //Minimun allowed angle
+         ANGLE_RANGE,        //0-100 mapping to angle values
+         ANGLE_REFERENCE,    //Reference which against angle corrections are applied   
+         ANGLE_ACTUATOR_MIN_LENGTH,
+         ANGLE_ACTUATOR_MAX_LENGTH,
+         ANGLE_ACTUATOR_MIN_LIMIT,
+         ANGLE_ACTUATOR_MAX_LIMIT,
+         ANGLE_MOTOR_TIMEOUT,//timeout in milliseconds
+         0,                  //timeout current value starts at zero
+         STATUS_OK,
+         &angleConversion //angle correction function pointer
+    };
+    motor m2 =
+    {
+         &PORTB, &DDRB, 3, &TCCR2A, (OC2A + FAST_PWM), &TCCR2B, PRESCALER, &OCR2A, //MOTOR B FORWARD
+         &PORTD, &DDRD, 3, &TCCR2A, (OC2B + FAST_PWM), &TCCR2B, PRESCALER, &OCR2B,//MOTOR B REVERSE
+         &PORTB, &DDRB, 4, //MOTOR Enable control
+         TILT_ACTUATOR,
+         0.0,         //Current position
+         FORWARD,   //current dir
+         0.0, //current position
+         MIN_TILT + (TILT_RANGE / 2), //Set position, half way
+         MOTOR_ACC_STEP,     //Acceleration step
+         MOTOR_ACC_STEP,     //Deacceleration step
+         MOTOR_ACCELERATION, //Acceleration time
+         MOTOR_ACCELERATION, //deacceleration time
+         MOTOR_HYSTERESIS,   //Anglular hysteresis in degrees
+         TILT_MAX_PWM,      //MAX pwm value for anglular movements
+         MIN_TILT,          //Minimun allowed angle
+         TILT_RANGE,        //0-100 mapping to angle values
+         TILT_REFERENCE,
+         TILT_ACTUATOR_MIN_LENGTH,
+         TILT_ACTUATOR_MAX_LENGTH,
+         TILT_ACTUATOR_MIN_LIMIT,
+         TILT_ACTUATOR_MAX_LIMIT,
+         TILT_MOTOR_TIMEOUT,//timeout in milliseconds
+         0,                  //timeout current value starts at zero
+         STATUS_OK,
+         &tiltConversion //angle correction function pointer
+    };
+    motors[ANGLE_MOTOR] = m1;
+    motors[TILT_MOTOR] = m2;
 
-   //Set direction and enable to output
-    MOTOR_A_FWD_DIR |= 1<<MOTOR_A_FWD_PIN; 
-    MOTOR_A_RWD_DIR |= 1<<MOTOR_A_RWD_PIN; 
-    MOTOR_A_ENABLE_DIR |= 1<<MOTOR_A_ENABLE_PIN;
-    
-    MOTOR_B_FWD_DIR |= 1<<MOTOR_B_FWD_PIN; 
-    MOTOR_B_RWD_DIR |= 1<<MOTOR_B_RWD_PIN;
-    MOTOR_B_ENABLE_DIR |= 1<<MOTOR_B_ENABLE_PIN;
-    
-    //Init to low so nothing moves
-    MOTOR_A_FWD_PORT &= ~(1<<MOTOR_A_FWD_PIN);
-    MOTOR_A_RWD_PORT &= ~(1<<MOTOR_A_RWD_PIN);
-    MOTOR_A_ENABLE_PORT &= ~(1<<MOTOR_A_ENABLE_PIN);
-    
-    MOTOR_B_FWD_PORT &= ~(1<<MOTOR_B_FWD_PIN);
-    MOTOR_B_RWD_PORT &= ~(1<<MOTOR_B_RWD_PIN);
-    MOTOR_B_ENABLE_PORT &= ~(1<<MOTOR_B_ENABLE_PIN);
-    
-    //MOTOR A using TIMER0
-    TCCR0A = 0x03; //OC1C and OC1B,  Fast PWM 8bit Top=0xFF
-    OCR0A = 0x0; //PWM pulse width
-    OCR0B = 0x0; //PWM pulse width
-    TCCR0B = 0x00; //0x01 = no scaling, 0x02 = /8, 0x03 = /64, 0x04 = /256, 0x05 = /1024
-    TCNT0 = 0; //Clean counter
-    
-    //MOTOR B using TIMER2
-    TCCR2A = 0x03; //OC4B and OC4A, Fast PWM 8bit
-    OCR2A = 0x0; //PWM pulse width
-    OCR2B = 0x0; //PWM pulse width
-    TCCR2B = 0x00; //0x01 = no scaling, 0x02 = /8, 0x03 = /64, 0x04 = /256, 0x05 = /1024
-    TCNT2 = 0; //Clean counter
 
-    //Update motor positions
-    motor_current_position[ANGLE_MOTOR] = getAngle();
-    motor_current_position[TILT_MOTOR] = getTilt();    
+    for(uint8_t i = 0; i<NUM_OF_MOTORS; i++){
+        motor m = motors[i];
+        //Set direction and enable to output pins
+        *m.fwd_dir_addr |= 1<<m.fwd_pin;
+        *m.rev_dir_addr |= 1<<m.rev_pin;
+        *m.enable_dir_addr |= 1<<m.enable_pin;
+        
+        //Set pullups correctly
+        *m.fwd_port_addr &= ~(1<<m.fwd_pin);
+        *m.rev_port_addr &= ~(1<<m.rev_pin);
+        *m.enable_port_addr &= ~(1<<m.enable_pin);
+        
+        //Init forward PWM settings
+        *m.fwd_TCCRA_addr = 0x00;//m.fwd_TCCRA_value;
+        *m.fwd_TCCRB_addr = 0x00;//m.fwd_TCCRB_value;
+        *m.fwd_OCR_addr = 0x00; //Init PWM to zero
+        
+        //Init reverse PWM settings
+        *m.rev_TCCRA_addr = 0x00;//m.rev_TCCRA_value;
+        *m.rev_TCCRB_addr = 0x00; //m.rev_TCCRB_value;
+        *m.rev_OCR_addr = 0x00; //Init PWM to zero
+        
+        m.current_position = getMotorPosition(&m);  
+    }
+       //Update motor positions
+    //motors[ANGLE_MOTOR].current_position = getAngle();
+    //motors[TILT_MOTOR].current_position  = getTilt();    
     
    // GTCCR = 0x00;       //Start Counter
 }
 
-void disableMotorPWM(uint8_t motor){
-    if (motor == MOTOR_A){
-        MOTOR_A_ENABLE_PORT &= ~(1<<MOTOR_A_ENABLE_PIN);
-        TCCR0A = 0x03; //WGM10 //Fast PWM
-        TCCR0B = 0x00; //disable clock completety
-        TCNT0 = 0; //Clean counter
-        OCR0A = 0; 
-        OCR0B = 0;
-    }
-    else if (motor == MOTOR_B){
-        MOTOR_B_ENABLE_PORT &= ~(1<<MOTOR_B_ENABLE_PIN);
-        TCCR2A = 0x03; //WGM10 //Fast PWM
-        TCCR2B = 0x00; //disable clock completety'
-        TCNT2 = 0; //Clean counter
-        OCR2A = 0; //Set PWM to 0
-        OCR2B = 0; //Set PWM to 0
-    }
-}
+void disableMotorPWM(motor *m){
 
+    *m->enable_port_addr &= ~(1<<m->enable_pin); //Disable motor => clear enable port
+    *m->fwd_TCCRA_addr = 0x00;//m.fwd_TCCRA_value;
+    *m->fwd_TCCRB_addr = 0x00;//m.fwd_TCCRB_value;
+    *m->fwd_OCR_addr = 0x00; //Init PWM to zero
+    
+    //Init reverse PWM settings
+    *m->rev_TCCRA_addr = 0x00;//m.rev_TCCRA_value;
+    *m->rev_TCCRB_addr = 0x00; //m.rev_TCCRB_value;
+    *m->rev_OCR_addr = 0x00; //Init PWM to zero
+
+} 
 //volatile uint8_t *OCRC_ADDR[] = {&OCR1CL, &OCR4AL }
 //volatile uint8_t *OCRB_ADDR[] = {&OCR1BL, &OCR4BL }
 
-void setMotor(uint8_t motor, uint8_t dir, uint8_t pwm){
-    if (motor == MOTOR_A){
-        OCR0A = pwm; //PWM pulse width
-        OCR0B = pwm; //PWM pulse width
-        motor_current_pwm[motor] = pwm;
-        if (pwm > 0){
-            if (dir == FORWARD){ //Forward
-                MOTOR_A_RWD_PORT &= ~(1<<MOTOR_A_RWD_PIN); //Set Reverse to LOW
-                TCCR0A = MOTOR_A_FWD_COUNTER; //Enable Forward drive only, disconnect Backward
-            }
-            else{ //Backward
-                MOTOR_A_FWD_PORT &= ~(1<<MOTOR_A_FWD_PIN); //Set Forward to LOW
-                TCCR0A = MOTOR_A_RWD_COUNTER; //Enable Reverse drive only, disconnect Forward
-            }
-            TCCR0B = PRESCALER; 
-            MOTOR_A_ENABLE_PORT |= 1<<MOTOR_A_ENABLE_PIN; //Enable motor A in general
+void setMotor(motor *m, uint8_t dir, uint8_t pwm){
+    m->current_pwm = pwm;
+    if (pwm > 0){
+        if (dir == FORWARD){ //Forward
+            *m->rev_OCR_addr = 0x00; //PWM pulse width
+            *m->fwd_OCR_addr = pwm; 
+            *m->rev_port_addr &= ~(1<<m->rev_pin);
+            *m->rev_TCCRA_addr = 0x00; //Disable reverse
+            *m->fwd_TCCRA_addr = m->fwd_TCCRA_value; //Activate PWM forward
+            
+            *m->rev_TCCRB_addr = 0x00; //Disable clock Rev
+            *m->fwd_TCCRB_addr = m->fwd_TCCRB_value;
         }
-        else{
-            disableMotorPWM(motor);
+        else{ //Backward
+            *m->fwd_OCR_addr = 0x00;
+            *m->rev_OCR_addr = pwm; 
+            *m->fwd_port_addr &= ~(1<<m->fwd_pin);
+            *m->fwd_TCCRA_addr = 0x00; //Disable FWD
+            *m->rev_TCCRA_addr = m->rev_TCCRA_value;
+
+            *m->fwd_TCCRB_addr = 0x00;
+            *m->rev_TCCRB_addr = m->rev_TCCRB_value;
         }
+        
+        *m->enable_port_addr |= 1<<m->enable_pin; 
     }
-    else if (motor == MOTOR_B){
-        OCR2A = pwm; //PWM pulse width
-        OCR2B = pwm; //PWM pulse width
-        motor_current_pwm[motor] = pwm;
-        if (pwm > 0){
-            if (dir == FORWARD){ //Forward
-                MOTOR_B_RWD_PORT &= ~(1<<MOTOR_B_RWD_PIN); //Set Reverse to LOW
-                TCCR2A = MOTOR_B_FWD_COUNTER; //Enable Forward drive only, disconnect Backward
-            }
-            else{ //Backward
-                MOTOR_B_FWD_PORT &= ~(1<<MOTOR_B_FWD_PIN); //Set Forward to LOW
-                TCCR2A = MOTOR_B_RWD_COUNTER; //Enable Reverse drive only, disconnect Forward
-            }
-            TCCR2B = PRESCALER; 
-            MOTOR_B_ENABLE_PORT |= 1<<MOTOR_B_ENABLE_PIN; //Enable motor B in general
-        }
-        else{
-            disableMotorPWM(motor);
-        }
+    else{
+        disableMotorPWM(m);
     }
 }
 

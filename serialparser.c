@@ -70,6 +70,25 @@ uint16_t readInt16(uint8_t start, uint8_t stop){
     return atoi(buf);
 }
 
+/*
+    Reads floating point value from ringbuffer. 
+    Function must be used because serial data is stored in to ring buffer
+*/
+double readFloat(uint8_t start, uint8_t stop){
+    char buf[10] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0','\0'};
+    
+    //clearBuffer(buf,5);
+    for (uint8_t i=0; i<10; i++){
+        buf[i] = buffer[start++];
+        if (start == stop){
+           i = 10;
+        }
+    }
+    printf(buf);
+    printf("\n");
+    return atof(buf);
+}
+
 //Start and Stop values are pointing to Global ring buffer
 uint8_t findParameter(char startchar, char stopchar, char secondstopchar, uint8_t maxlength, uint8_t *start, uint8_t *stop){
     //Find correct start character
@@ -106,11 +125,16 @@ void parseCommands(void){
             if (buffer[ring_read] == '1'){    
                 uint8_t succ = findParameter(':', ':', '\n', 20, &start, &stop);
                 if (succ == FIND_SUCCESS){
-                    setAngle(readInt16(start, stop));
+                    uint8_t asuccess = setAngle(readFloat(start, stop));
                     succ = findParameter(':', ':', '\n', 20, &start, &stop);
                     if (succ == FIND_SUCCESS){
-                        setTilt(readInt16(start, stop));
-                        fprintf(port,"OK\n");
+                        uint8_t tsuccess = setTilt(readFloat(start, stop));
+                        if (asuccess == 0 && tsuccess == 0){
+                            fprintf(port,"OK\n");
+                        }
+                        else{
+                            fprintf(port, "ERR\n");
+                        }
                     }
                     else{
                         fprintf(port, "ERR\n");
@@ -131,10 +155,13 @@ void parseCommands(void){
                 fprintf(port,"G1:%d\n", SW_VERSION);
             }
             else if (value == '2'){ //Read current angle and tilt set_values
-                fprintf(port,"G2:%d:%d\n", getSetAngle(), getSetTilt());
+                fprintf(port,"G2:%5.2f:%5.2f\n", getSetAngle(), getSetTilt());
             }
             else if (value == '3'){ //Reads current values from motorctrl -module, actual values
-                fprintf(port,"G3:%d:%d\n", getAngle(), getTilt());
+                fprintf(port,"G3:%5.2f:%5.2f\n", getAngle(), getTilt());
+            }
+            else if (value == '4'){ //get motor statuses
+                fprintf(port, "G4:%d:%d\n", getAngleMotorStatus(), getTiltMotorStatus());
             }
             else{
                 fprintf(port,"ERR\n");
@@ -143,11 +170,10 @@ void parseCommands(void){
         }
         else if (command == 'A'){ //ADC read voltage, commands A0\n  A1\n ,A2\n ,A3\n ,A4\n and so on are possible
             //ring_read++;
-            uint8_t channel = 0;
             char buff[2];
             clearBuffer(buff, 2);
             buff[0] = buffer[ring_read];
-            channel = atoi(buff);
+            uint8_t channel = atoi(buff);
             if (channel < 8){
                 fprintf(port, "A%d:%d\n", channel, GetVoltage(channel, 0x40));
             }
@@ -163,11 +189,9 @@ void parseCommands(void){
             }
             read_until_line_end();
         }
-        else if (command == 'R'){ //RAW ADC values
-             
-            
-            
-             read_until_line_end(); 
+        else if (command == 'S'){ //Read both motor status
+            fprintf(port,"S:%d:%d\n",getAngleMotorStatus(), getTiltMotorStatus());
+            read_until_line_end();    
         }
     }
 }
