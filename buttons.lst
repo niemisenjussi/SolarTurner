@@ -1,0 +1,213 @@
+   1               		.file	"buttons.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__tmp_reg__ = 0
+   6               	__zero_reg__ = 1
+   8               		.text
+   9               	.Ltext0:
+ 104               	.global	initButtons
+ 106               	initButtons:
+   1:buttons.c     **** #include "buttons.h"
+   2:buttons.c     **** 
+   3:buttons.c     **** #define AUTO_MANUAL_SWITCH_DIR DDRD 
+   4:buttons.c     **** #define AUTO_MANUAL_SWITCH_PORT PORTD
+   5:buttons.c     **** #define AUTO_MANUAL_SWITCH_INPUT PIND
+   6:buttons.c     **** #define AUTO_MANUAL_SWITCH_PIN 2
+   7:buttons.c     **** 
+   8:buttons.c     **** #define TILT_UP_DIR DDRB
+   9:buttons.c     **** #define TILT_UP_PORT PORTB
+  10:buttons.c     **** #define TILT_UP_INPUT PINB
+  11:buttons.c     **** #define TILT_UP_PIN 2
+  12:buttons.c     **** 
+  13:buttons.c     **** #define TILT_DOWN_DIR DDRB
+  14:buttons.c     **** #define TILT_DOWN_PORT PORTB
+  15:buttons.c     **** #define TILT_DOWN_INPUT PINB
+  16:buttons.c     **** #define TILT_DOWN_PIN 1
+  17:buttons.c     **** 
+  18:buttons.c     **** #define TURN_LEFT_DIR DDRB
+  19:buttons.c     **** #define TURN_LEFT_PORT PORTB
+  20:buttons.c     **** #define TURN_LEFT_INPUT PINB
+  21:buttons.c     **** #define TURN_LEFT_PIN 0
+  22:buttons.c     **** 
+  23:buttons.c     **** #define TURN_RIGHT_DIR DDRD
+  24:buttons.c     **** #define TURN_RIGHT_PORT PORTD
+  25:buttons.c     **** #define TURN_RIGHT_INPUT PINB
+  26:buttons.c     **** #define TURN_RIGHT_PIN 4
+  27:buttons.c     **** 
+  28:buttons.c     **** void initButtons(void){
+ 108               	.LM0:
+ 109               	.LFBB1:
+ 110               	/* prologue: function */
+ 111               	/* frame size = 0 */
+ 112               	/* stack size = 0 */
+ 113               	.L__stack_usage = 0
+  29:buttons.c     ****     AUTO_MANUAL_SWITCH_DIR &= ~(1<<AUTO_MANUAL_SWITCH_PIN); //Input
+ 115               	.LM1:
+ 116 0000 5298      		cbi 0xa,2
+  30:buttons.c     ****     AUTO_MANUAL_SWITCH_PORT &= ~(1<<AUTO_MANUAL_SWITCH_PIN); //Pulldown
+ 118               	.LM2:
+ 119 0002 5A98      		cbi 0xb,2
+  31:buttons.c     ****     
+  32:buttons.c     ****     TILT_UP_DIR &= ~(1<<TILT_UP_PIN); //Input
+ 121               	.LM3:
+ 122 0004 2298      		cbi 0x4,2
+  33:buttons.c     ****     TILT_UP_PORT &= ~(1<<TILT_UP_PIN); //Pulldown
+ 124               	.LM4:
+ 125 0006 2A98      		cbi 0x5,2
+  34:buttons.c     ****     
+  35:buttons.c     ****     TILT_DOWN_DIR &= ~(1<<TILT_DOWN_PIN); //Input
+ 127               	.LM5:
+ 128 0008 2198      		cbi 0x4,1
+  36:buttons.c     ****     TILT_DOWN_PORT &= ~(1<<TILT_DOWN_PIN); //Pulldown
+ 130               	.LM6:
+ 131 000a 2998      		cbi 0x5,1
+  37:buttons.c     ****     
+  38:buttons.c     ****     TURN_LEFT_DIR &= ~(1<<TURN_LEFT_PIN); //Input
+ 133               	.LM7:
+ 134 000c 2098      		cbi 0x4,0
+  39:buttons.c     ****     TURN_LEFT_PORT &= ~(1<<TURN_LEFT_PIN); //Pulldown
+ 136               	.LM8:
+ 137 000e 2898      		cbi 0x5,0
+  40:buttons.c     ****     
+  41:buttons.c     ****     TURN_RIGHT_DIR &= ~(1<<TURN_RIGHT_PIN); //Input
+ 139               	.LM9:
+ 140 0010 5498      		cbi 0xa,4
+  42:buttons.c     ****     TURN_RIGHT_PORT &= ~(1<<TURN_RIGHT_PIN); //Pulldown   
+ 142               	.LM10:
+ 143 0012 5C98      		cbi 0xb,4
+ 144 0014 0895      		ret
+ 146               	.Lscope1:
+ 148               	.global	readAutoManualState
+ 150               	readAutoManualState:
+  43:buttons.c     **** }
+  44:buttons.c     **** 
+  45:buttons.c     **** uint8_t readAutoManualState(void){
+ 152               	.LM11:
+ 153               	.LFBB2:
+ 154               	/* prologue: function */
+ 155               	/* frame size = 0 */
+ 156               	/* stack size = 0 */
+ 157               	.L__stack_usage = 0
+  46:buttons.c     ****     AUTO_MANUAL_SWITCH_DIR |= 1<<AUTO_MANUAL_SWITCH_PIN; //Input
+ 159               	.LM12:
+ 160 0016 529A      		sbi 0xa,2
+  47:buttons.c     ****     AUTO_MANUAL_SWITCH_PORT &= ~(1<<AUTO_MANUAL_SWITCH_PIN); //Pulldown
+ 162               	.LM13:
+ 163 0018 5A98      		cbi 0xb,2
+  48:buttons.c     ****     //_delay_ms(1);
+  49:buttons.c     ****     //AUTO_MANUAL_SWITCH_DIR &= ~(1<<AUTO_MANUAL_SWITCH_PIN); //Input
+  50:buttons.c     ****     //AUTO_MANUAL_SWITCH_PORT &= ~(1<<AUTO_MANUAL_SWITCH_PIN); //Pulldown
+  51:buttons.c     ****     //_delay_ms(10);
+  52:buttons.c     ****     if (AUTO_MANUAL_SWITCH_INPUT & (1<<AUTO_MANUAL_SWITCH_PIN)){
+ 165               	.LM14:
+ 166 001a 89B1      		in r24,0x9
+  53:buttons.c     ****         return 1;
+  54:buttons.c     ****     }
+  55:buttons.c     ****     else{
+  56:buttons.c     ****         return 0;
+  57:buttons.c     ****     }
+  58:buttons.c     **** }
+ 168               	.LM15:
+ 169 001c 82FB      		bst r24,2
+ 170 001e 8827      		clr r24
+ 171 0020 80F9      		bld r24,0
+ 172 0022 0895      		ret
+ 174               	.Lscope2:
+ 176               	.global	readTiltButtonState
+ 178               	readTiltButtonState:
+  59:buttons.c     **** 
+  60:buttons.c     **** uint8_t readTiltButtonState(void){
+ 180               	.LM16:
+ 181               	.LFBB3:
+ 182               	/* prologue: function */
+ 183               	/* frame size = 0 */
+ 184               	/* stack size = 0 */
+ 185               	.L__stack_usage = 0
+  61:buttons.c     ****     if (TILT_UP_INPUT & (1<<TILT_UP_PIN)){
+ 187               	.LM17:
+ 188 0024 1A99      		sbic 0x3,2
+ 189 0026 00C0      		rjmp .L5
+  62:buttons.c     ****         return 1;
+  63:buttons.c     ****     }
+  64:buttons.c     ****     else if (TILT_DOWN_INPUT & (1<<TILT_DOWN_PIN)){
+ 191               	.LM18:
+ 192 0028 93B1      		in r25,0x3
+ 193 002a 892F      		mov r24,r25
+ 194 002c 8270      		andi r24,lo8(2)
+ 195 002e 91FF      		sbrs r25,1
+ 196 0030 00C0      		rjmp .L8
+  65:buttons.c     ****         return 2;
+ 198               	.LM19:
+ 199 0032 82E0      		ldi r24,lo8(2)
+  66:buttons.c     ****     }
+  67:buttons.c     ****     else{
+  68:buttons.c     ****         return 0;
+  69:buttons.c     ****     }
+  70:buttons.c     **** }
+ 201               	.LM20:
+ 202 0034 0895      		ret
+ 203               	.L8:
+ 204 0036 0895      		ret
+ 205               	.L5:
+  62:buttons.c     ****     }
+ 207               	.LM21:
+ 208 0038 81E0      		ldi r24,lo8(1)
+ 209 003a 0895      		ret
+ 211               	.Lscope3:
+ 213               	.global	readTurnButtonState
+ 215               	readTurnButtonState:
+  71:buttons.c     **** 
+  72:buttons.c     **** uint8_t readTurnButtonState(void){
+ 217               	.LM22:
+ 218               	.LFBB4:
+ 219               	/* prologue: function */
+ 220               	/* frame size = 0 */
+ 221               	/* stack size = 0 */
+ 222               	.L__stack_usage = 0
+  73:buttons.c     ****     if (TURN_LEFT_INPUT & (1<<TURN_LEFT_PIN)){
+ 224               	.LM23:
+ 225 003c 1899      		sbic 0x3,0
+ 226 003e 00C0      		rjmp .L11
+  74:buttons.c     ****         return 1;
+  75:buttons.c     ****     }
+  76:buttons.c     ****     else if (TURN_RIGHT_INPUT & (1<<TURN_RIGHT_PIN)){
+ 228               	.LM24:
+ 229 0040 93B1      		in r25,0x3
+ 230 0042 892F      		mov r24,r25
+ 231 0044 8071      		andi r24,lo8(16)
+ 232 0046 94FF      		sbrs r25,4
+ 233 0048 00C0      		rjmp .L13
+  77:buttons.c     ****         return 2;
+ 235               	.LM25:
+ 236 004a 82E0      		ldi r24,lo8(2)
+  78:buttons.c     ****     }
+  79:buttons.c     ****     else{
+  80:buttons.c     ****         return 0;
+  81:buttons.c     ****     }
+  82:buttons.c     **** }
+ 238               	.LM26:
+ 239 004c 0895      		ret
+ 240               	.L13:
+ 241 004e 0895      		ret
+ 242               	.L11:
+  74:buttons.c     ****     }
+ 244               	.LM27:
+ 245 0050 81E0      		ldi r24,lo8(1)
+ 246 0052 0895      		ret
+ 248               	.Lscope4:
+ 250               	.Letext0:
+ 251               		.ident	"GCC: (GNU) 4.9.2"
+DEFINED SYMBOLS
+                            *ABS*:00000000 buttons.c
+     /tmp/cc7duKCS.s:2      *ABS*:0000003e __SP_H__
+     /tmp/cc7duKCS.s:3      *ABS*:0000003d __SP_L__
+     /tmp/cc7duKCS.s:4      *ABS*:0000003f __SREG__
+     /tmp/cc7duKCS.s:5      *ABS*:00000000 __tmp_reg__
+     /tmp/cc7duKCS.s:6      *ABS*:00000001 __zero_reg__
+     /tmp/cc7duKCS.s:106    .text:00000000 initButtons
+     /tmp/cc7duKCS.s:150    .text:00000016 readAutoManualState
+     /tmp/cc7duKCS.s:178    .text:00000024 readTiltButtonState
+     /tmp/cc7duKCS.s:215    .text:0000003c readTurnButtonState
+
+NO UNDEFINED SYMBOLS

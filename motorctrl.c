@@ -57,15 +57,19 @@
 #define MOTOR_B 1
 //Define Actuator ADC Channels for Motor_A and Motor_b
 
-#define ACTUATOR_ADC_A 2
-#define ACTUATOR_ADC_B 3
+#define ACTUATOR_ADC_A 0
+#define ACTUATOR_ADC_B 1
+#define ACTUATOR_CURRENT_ADC_A 6 
+#define ACTUATOR_CURRENT_ADC_B 7
 //Defines which actuator is controlling tilt and which controls angular movements
 
 #define ANGLE_MOTOR MOTOR_A
 #define TILT_MOTOR MOTOR_B 
 
-#define ANGLE_ACTUATOR ACTUATOR_ADC_A
-#define TILT_ACTUATOR  ACTUATOR_ADC_B
+#define ANGLE_ACTUATOR_ADC ACTUATOR_ADC_A
+#define TILT_ACTUATOR_ADC  ACTUATOR_ADC_B
+#define ANGLE_ACTUATOR_CURRENT_ADC ACTUATOR_CURRENT_ADC_A
+#define TILT_ACTUATOR_CURRENT_ADC ACTUATOR_CURRENT_ADC_B
 
 #define ANGLE_ACTUATOR_MIN_LENGTH ACTUATOR_A_MIN_LENGTH
 #define ANGLE_ACTUATOR_MAX_LENGTH ACTUATOR_A_MAX_LENGTH
@@ -84,7 +88,7 @@
 
 //returns motor final calculated position in degrees
 float getMotorPosition(motor *m){
-    float alen = getActuatorLength(m);
+    uint16_t alen = getActuatorLength(m);
     float aoffset = m->angle_correction(alen);
     return m->angle_reference + aoffset;
     /*
@@ -100,9 +104,9 @@ float getMotorPosition(motor *m){
 
 //returns motor actuator length in millimeters
 uint16_t getActuatorLength(motor *m){
-    uint16_t voltage = AVGVoltage(m->adc_channel, 0x40, NUMOFSAMPLES);
-                    // 25 + (180 - 25) = (155 / 1024) => 0.15136 * voltage = >
-    uint16_t length =  m->actuator_min_length + (((m->actuator_max_length-m->actuator_min_length) / 1024) * voltage); //volts per degree
+    uint16_t voltage = AVGVoltage(m->actuator_adc_channel, 0x40, NUMOFSAMPLES);
+    float effective_range = (m->actuator_max_length - m->actuator_min_length); 
+    uint16_t length =  m->actuator_min_length + (effective_range / 1024)*voltage; //volts per degree
     
     if (length >= m->actuator_max_limit){
         m->status = MAX_LIMIT;
@@ -113,23 +117,29 @@ uint16_t getActuatorLength(motor *m){
         m->status = MIN_LIMIT;
         motorControl(m, FORWARD, SHUTDOWN);  //SHUTDOWN motor
     }
-    
     return length;
+}
 
-    //m->current_position[actuator] = angle; //actuator is ADC position => 2 or 3 so array position is also 2 or 3   
+uint16_t getTiltActuatorCurrentLength(void){
+    return getActuatorLength(&motors[TILT_MOTOR]);
+}
+
+uint16_t getAngleActuatorCurrentLength(void){
+    return getActuatorLength(&motors[ANGLE_MOTOR]);
 }
 
 
-//Returns angle between -90.0 - 90.0, valid input range 30.0 - 50.0. This is converted to whole range.
+
+//Returns angle between -90.0 - 90.0, input value is in millimeters.
 float angleConversion(uint16_t f){
-    return -(360*atan((2*ANGLE_C*ANGLE_X-sqrt((-ANGLE_C*ANGLE_C + 2*ANGLE_C*f - pow(f,2.0) + ANGLE_X*ANGLE_X + ANGLE_Y*ANGLE_Y)*
+    return -(360L*atan((2*ANGLE_C*ANGLE_X-sqrt((-ANGLE_C*ANGLE_C + 2*ANGLE_C*f - pow(f,2.0) + ANGLE_X*ANGLE_X + ANGLE_Y*ANGLE_Y)*
             (ANGLE_C*ANGLE_C + 2*ANGLE_C*f + pow(f,2.0)- ANGLE_X*ANGLE_X - ANGLE_Y*ANGLE_Y)))/
             (ANGLE_C*ANGLE_C + 2*ANGLE_C*ANGLE_Y - pow(f,2.0) + ANGLE_X*ANGLE_X + ANGLE_Y*ANGLE_Y)))/M_PI;
 }
 
-//Returns tilt angle between 0 to 90 degrees positive, valid input range 41.0 - 60.0 => This is converted to 5 - 90 degrees. 0 => means panel is vertical, 90 => panel is horizontal 
+//Returns tilt angle between 0 to 90 degrees positive. input values in millimeters 
 float tiltConversion(uint16_t f){
-    return 90-(360*atan((2*TILT_C*TILT_X-sqrt((-TILT_C*TILT_C + 2*TILT_C*f - pow(f,2.0) + TILT_X*TILT_X + TILT_Y*TILT_Y)*
+    return 90-(360L*atan((2*TILT_C*TILT_X-sqrt((-TILT_C*TILT_C + 2*TILT_C*f - pow(f,2.0) + TILT_X*TILT_X + TILT_Y*TILT_Y)*
               (TILT_C*TILT_C + 2*TILT_C*f + pow(f,2.0)- TILT_X*TILT_X - TILT_Y*TILT_Y)))/
               (TILT_C*TILT_C + 2*TILT_C*TILT_Y - pow(f,2.0) + TILT_X*TILT_X + TILT_Y*TILT_Y)))/M_PI;
 }
@@ -289,7 +299,10 @@ void initMotor(void){
          &PORTD, &DDRD, 6, &TCCR0A, (OC0B + FAST_PWM), &TCCR0B, 0x00, &OCR0A, //MOTOR A FORWARD
          &PORTD, &DDRD, 5, &TCCR0A, (OC0A + FAST_PWM), &TCCR0B, 0x00, &OCR0B, //MOTOR A REVERSE
          &PORTD, &DDRD, 7, //MOTOR Enable control
-         ANGLE_ACTUATOR,
+         ANGLE_ACTUATOR_ADC,
+         ANGLE_ACTUATOR_CURRENT_ADC,
+         &PORTC, &DDRC, 2,
+         &PORTC, &DDRC, 3,
          0.0,       //Current position
          FORWARD,   //current dir
          0.0,       //current position
@@ -317,7 +330,10 @@ void initMotor(void){
          &PORTB, &DDRB, 3, &TCCR2A, (OC2A + FAST_PWM), &TCCR2B, PRESCALER, &OCR2A, //MOTOR B FORWARD
          &PORTD, &DDRD, 3, &TCCR2A, (OC2B + FAST_PWM), &TCCR2B, PRESCALER, &OCR2B,//MOTOR B REVERSE
          &PORTB, &DDRB, 4, //MOTOR Enable control
-         TILT_ACTUATOR,
+         TILT_ACTUATOR_ADC,
+         TILT_ACTUATOR_CURRENT_ADC,
+         &PORTC, &DDRC, 4,
+         &PORTC, &DDRC, 5,
          0.0,         //Current position
          FORWARD,   //current dir
          0.0, //current position
@@ -366,6 +382,13 @@ void initMotor(void){
         *m.rev_TCCRB_addr = 0x00; //m.rev_TCCRB_value;
         *m.rev_OCR_addr = 0x00; //Init PWM to zero
         
+        //init Actuator +5 and GND pins
+        *m.actuator_1_port_addr |= 1<<m.actuator_1_pin;
+        *m.actuator_1_dir_addr |= 1<<m.actuator_1_pin;
+        *m.actuator_1_port_addr &= ~(1<<m.actuator_2_pin);
+        *m.actuator_1_dir_addr &= ~(1<<m.actuator_2_pin);
+        _delay_ms(10); //wait 10ms so ADC pins settle.
+
         m.current_position = getMotorPosition(&m);  
     }
        //Update motor positions

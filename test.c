@@ -8,6 +8,7 @@
 #include "ADC.h"
 #include "motorctrl.h"
 #include "serialparser.h"
+#include "buttons.h"
 
 FILE port;
 //motor motors[NUM_OF_MOTORS];
@@ -36,18 +37,19 @@ void initSystemTimer(void){
     TIMSK1 = 0x02; //OCIEA enabled
     GTCCR = 0x00;    
 }
-void initPorts(void){
+void initLED(void){
     LED_DDR |= (1<<LED_PIN_NUM); 
 }
 int main (int argc, char *argv[])
 {
 	USART_Init(&port, 115200);
 	USART0_Flush();
-    initPorts();
+    initLED();
     initADC();
     initMotor();
 	initSerialParser(&port);
-    
+    initButtons();    
+
     initSystemTimer(); //Starts all timers which are used => GTCCR = 0x00;
     sei();
 // 
@@ -63,6 +65,20 @@ int main (int argc, char *argv[])
 //     }
 //     while(1){}
 // 
+//     motorController(); //Update positions
+//     
+//     fprintf(&port, "\n\n\n");
+//     uint16_t tiltlen = getTiltActuatorCurrentLength();
+//     fprintf(&port, "tilt_len:%d\n",tiltlen);
+//     uint16_t anglelen = getAngleActuatorCurrentLength();
+//     fprintf(&port, "angle_len:%d\n",anglelen);
+// 
+//     fprintf(&port, "tilt_angle:%5.2f\n",getTilt());
+//     fprintf(&port, "angle_angle:%5.2f\n",getAngle());
+//     
+//     fprintf(&port, "tilt_angle:%5.2f\n",tiltConversion(tiltlen));
+//     fprintf(&port, "angle_angle:%5.2f\n",angleConversion(anglelen));
+//  
 
     uint8_t angle = 0;
     uint8_t tilt = 125;
@@ -71,13 +87,14 @@ int main (int argc, char *argv[])
  
     while(1){
 	//	DISABLE_LED
-        uint8_t status = motorController();
-        if (status > STATUS_OK){
+        fprintf(&port,"auto:%d, tilt:%d, turn:%d\n",readAutoManualState(),readTiltButtonState(),readTurnButtonState());
+     //   uint8_t status = motorController();
+     //   if (status > STATUS_OK){
             //sendError();
-        }
+     //   }
         setAngle(angle++);
         setTilt(tilt++);
-        _delay_ms(500);
+        _delay_ms(100);
         TOGGLE_LED
     //    fprintf(&port,"angle:%d tilt:%d\n",getSetAngle(), getSetTilt());
       //  fprintf(&port,"d_angle:%d d_tilt:%d\n",motors[0].set_position, motors[1].set_position);

@@ -46,8 +46,18 @@ typedef struct{
     volatile uint8_t *enable_dir_addr;
     uint8_t enable_pin;
     
-    //ADC and PWM settings
-    int8_t adc_channel;
+    //Actuator connections
+    uint8_t actuator_adc_channel; //potentiometer ADC chanel
+    uint8_t actuator_current_adc_channel; // Channel which measures current consumption
+    volatile uint8_t *actuator_1_port_addr; //Pins where actuator potentiometer is connected
+    volatile uint8_t *actuator_1_dir_addr;
+    uint8_t actuator_1_pin;
+    volatile uint8_t *actuator_2_dir_addr;
+    volatile uint8_t *actuator_2_port_addr; //another end of potentiometer
+    uint8_t actuator_2_pin;
+    
+
+    //PWM and movement parameters
     volatile uint8_t current_pwm;
     volatile uint8_t current_dir;
     volatile float current_position;
@@ -69,7 +79,7 @@ typedef struct{
     uint16_t timeout_value;
     motor_status status;
     float (*angle_correction)(uint16_t f);
-    
+     
 } motor;
 
 motor motors[NUM_OF_MOTORS];
@@ -82,6 +92,8 @@ uint8_t setAngle(float angle);
 uint8_t setTilt(float tilt);
 float getSetAngle(void);
 float getSetTilt(void);
+uint16_t getTiltActuatorCurrentLength(void);
+uint16_t getAngleActuatorCurrentLength(void);
 motor_status getAngleMotorStatus(void);
 motor_status getTiltMotorStatus(void);
 motor_status motorController(void);

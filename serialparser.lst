@@ -1,0 +1,1187 @@
+   1               		.file	"serialparser.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__tmp_reg__ = 0
+   6               	__zero_reg__ = 1
+   8               		.text
+   9               	.Ltext0:
+ 127               	.global	read_until_line_end
+ 129               	read_until_line_end:
+   1:serialparser.c **** #include "serialparser.h"
+   2:serialparser.c **** #include "ADC.h"
+   3:serialparser.c **** #include "USART.h"
+   4:serialparser.c **** #include "motorctrl.h"
+   5:serialparser.c **** #include <avr/io.h>
+   6:serialparser.c **** #include <stdio.h>
+   7:serialparser.c **** #include <stdlib.h>
+   8:serialparser.c **** #include <util/delay.h>
+   9:serialparser.c **** #include <string.h>
+  10:serialparser.c **** #include <avr/interrupt.h>
+  11:serialparser.c **** 
+  12:serialparser.c **** #define SW_VERSION 1
+  13:serialparser.c **** #define BUFSIZE 0xFF
+  14:serialparser.c **** 
+  15:serialparser.c **** #define FIND_SUCCESS 1
+  16:serialparser.c **** #define ERROR_CANNOT_FIND 2
+  17:serialparser.c **** #define ERROR_MAX_LENGTH 3
+  18:serialparser.c **** 
+  19:serialparser.c **** volatile uint8_t ring_write = 0;
+  20:serialparser.c **** volatile uint8_t ring_read = 0;
+  21:serialparser.c **** volatile char buffer[BUFSIZE+1];
+  22:serialparser.c **** 
+  23:serialparser.c **** FILE *port; //Serialport to host machine
+  24:serialparser.c **** 
+  25:serialparser.c **** __attribute__((always_inline)) inline static void clearBuffer(volatile char *buffer,uint8_t len){
+  26:serialparser.c **** 	for(uint8_t i=0;i<len;i++){	*buffer++ = '\0';}
+  27:serialparser.c **** }
+  28:serialparser.c **** 
+  29:serialparser.c **** ISR(USART_RX_vect) //Serial port to Host machine
+  30:serialparser.c **** {
+  31:serialparser.c **** 	volatile char temp = USART_Receive0();
+  32:serialparser.c **** 	buffer[ring_write++] = temp;
+  33:serialparser.c **** 	if (temp == '\n' || temp == '\r'){
+  34:serialparser.c ****         parseCommands();
+  35:serialparser.c **** 	}
+  36:serialparser.c **** }
+  37:serialparser.c **** 
+  38:serialparser.c **** /*
+  39:serialparser.c ****     Reads ring buffer until it finds linefeed, carrier return or ring buffer is empty.
+  40:serialparser.c **** */
+  41:serialparser.c **** void read_until_line_end(void){
+ 131               	.LM0:
+ 132               	.LFBB1:
+ 133               	.L20:
+ 134               	/* prologue: function */
+ 135               	/* frame size = 0 */
+ 136               	/* stack size = 0 */
+ 137               	.L__stack_usage = 0
+  42:serialparser.c ****     while(buffer[ring_read] != '\n' &&  buffer[ring_read] != '\r'  && ring_read != ring_write){
+ 139               	.LM1:
+ 140 0000 E091 0000 		lds r30,ring_read
+ 141 0004 F0E0      		ldi r31,0
+ 142 0006 E050      		subi r30,lo8(-(buffer))
+ 143 0008 F040      		sbci r31,hi8(-(buffer))
+ 144 000a 8081      		ld r24,Z
+ 145 000c 8A30      		cpi r24,lo8(10)
+ 146 000e 01F0      		breq .L1
+ 147 0010 E091 0000 		lds r30,ring_read
+ 148 0014 F0E0      		ldi r31,0
+ 149 0016 E050      		subi r30,lo8(-(buffer))
+ 150 0018 F040      		sbci r31,hi8(-(buffer))
+ 151 001a 8081      		ld r24,Z
+ 152 001c 8D30      		cpi r24,lo8(13)
+ 153 001e 01F0      		breq .L1
+ 154 0020 9091 0000 		lds r25,ring_read
+ 155 0024 8091 0000 		lds r24,ring_write
+ 156 0028 9817      		cp r25,r24
+ 157 002a 01F0      		breq .L1
+  43:serialparser.c ****         ring_read++;
+ 159               	.LM2:
+ 160 002c 8091 0000 		lds r24,ring_read
+ 161 0030 8F5F      		subi r24,lo8(-(1))
+ 162 0032 8093 0000 		sts ring_read,r24
+ 163 0036 00C0      		rjmp .L20
+ 164               	.L1:
+ 165 0038 0895      		ret
+ 167               	.Lscope1:
+ 170               	.global	initSerialParser
+ 172               	initSerialParser:
+  44:serialparser.c ****     }
+  45:serialparser.c **** }
+  46:serialparser.c **** 
+  47:serialparser.c **** /*
+  48:serialparser.c ****     Initializes serialport and clears ring buffer
+  49:serialparser.c ****     This function also takes angle and tilt global variable pointer where set angle values are stor
+  50:serialparser.c **** */
+  51:serialparser.c **** void initSerialParser(FILE *serialport){
+ 174               	.LM3:
+ 175               	.LFBB2:
+ 176               	/* prologue: function */
+ 177               	/* frame size = 0 */
+ 178               	/* stack size = 0 */
+ 179               	.L__stack_usage = 0
+  52:serialparser.c ****     port = serialport;
+ 181               	.LM4:
+ 182 003a 9093 0000 		sts port+1,r25
+ 183 003e 8093 0000 		sts port,r24
+ 184 0042 E0E0      		ldi r30,lo8(buffer)
+ 185 0044 F0E0      		ldi r31,hi8(buffer)
+ 186               	.L23:
+ 187               	.LBB18:
+ 188               	.LBB19:
+  26:serialparser.c **** }
+ 190               	.LM5:
+ 191 0046 1082      		st Z,__zero_reg__
+ 192 0048 3196      		adiw r30,1
+ 193 004a 80E0      		ldi r24,hi8(buffer+255)
+ 194 004c E030      		cpi r30,lo8(buffer+255)
+ 195 004e F807      		cpc r31,r24
+ 196 0050 01F4      		brne .L23
+ 197               	/* epilogue start */
+ 198               	.LBE19:
+ 199               	.LBE18:
+  53:serialparser.c ****     clearBuffer(buffer, BUFSIZE);
+  54:serialparser.c **** }
+ 201               	.LM6:
+ 202 0052 0895      		ret
+ 204               	.Lscope2:
+ 208               	.global	readInt16
+ 210               	readInt16:
+  55:serialparser.c **** 
+  56:serialparser.c **** /*
+  57:serialparser.c ****     Reads 16 bit int from ringbuffer. 
+  58:serialparser.c ****     Function must be used because serial data is stored in to ring buffer
+  59:serialparser.c **** */
+  60:serialparser.c **** uint16_t readInt16(uint8_t start, uint8_t stop){
+ 212               	.LM7:
+ 213               	.LFBB3:
+ 214 0054 A5E0      		ldi r26,lo8(5)
+ 215 0056 B0E0      		ldi r27,0
+ 216 0058 E0E0      		ldi r30,lo8(gs(1f))
+ 217 005a F0E0      		ldi r31,hi8(gs(1f))
+ 218 005c 0C94 0000 		jmp __prologue_saves__+((18 - 2) * 2)
+ 219               	1:
+ 220               	/* prologue: function */
+ 221               	/* frame size = 5 */
+ 222               	/* stack size = 7 */
+ 223               	.L__stack_usage = 7
+ 224 0060 E82F      		mov r30,r24
+  61:serialparser.c ****     char buf[5] = {'\0','\0','\0','\0','\0'};
+ 226               	.LM8:
+ 227 0062 AE01      		movw r20,r28
+ 228 0064 4F5F      		subi r20,-1
+ 229 0066 5F4F      		sbci r21,-1
+ 230 0068 85E0      		ldi r24,lo8(5)
+ 231 006a DA01      		movw r26,r20
+ 232               		0:
+ 233 006c 1D92      		st X+,__zero_reg__
+ 234 006e 8A95      		dec r24
+ 235 0070 01F4      		brne 0b
+ 236 0072 DA01      		movw r26,r20
+ 237 0074 35E0      		ldi r19,lo8(5)
+ 238 0076 3E0F      		add r19,r30
+ 239               	.L27:
+ 240               	.LBB20:
+  62:serialparser.c ****     
+  63:serialparser.c ****     //clearBuffer(buf,5);
+  64:serialparser.c ****     for (uint8_t i=0; i<5; i++){
+  65:serialparser.c ****         buf[i] = buffer[start++];
+ 242               	.LM9:
+ 243 0078 91E0      		ldi r25,lo8(1)
+ 244 007a 9E0F      		add r25,r30
+ 245 007c F0E0      		ldi r31,0
+ 246 007e E050      		subi r30,lo8(-(buffer))
+ 247 0080 F040      		sbci r31,hi8(-(buffer))
+ 248 0082 2081      		ld r18,Z
+ 249 0084 2D93      		st X+,r18
+  66:serialparser.c ****         if (start == stop){
+ 251               	.LM10:
+ 252 0086 9617      		cp r25,r22
+ 253 0088 01F0      		breq .L26
+ 254 008a E92F      		mov r30,r25
+  64:serialparser.c ****         buf[i] = buffer[start++];
+ 256               	.LM11:
+ 257 008c 9313      		cpse r25,r19
+ 258 008e 00C0      		rjmp .L27
+ 259               	.L26:
+ 260               	.LBE20:
+  67:serialparser.c ****            i = 5;
+  68:serialparser.c ****         }
+  69:serialparser.c ****     }
+  70:serialparser.c ****     return atoi(buf);
+ 262               	.LM12:
+ 263 0090 CA01      		movw r24,r20
+ 264 0092 0E94 0000 		call atoi
+ 265               	/* epilogue start */
+  71:serialparser.c **** }
+ 267               	.LM13:
+ 268 0096 2596      		adiw r28,5
+ 269 0098 E2E0      		ldi r30, lo8(2)
+ 270 009a 0C94 0000 		jmp __epilogue_restores__ + ((18 - 2) * 2)
+ 275               	.Lscope3:
+ 279               	.global	readFloat
+ 281               	readFloat:
+  72:serialparser.c **** 
+  73:serialparser.c **** /*
+  74:serialparser.c ****     Reads floating point value from ringbuffer. 
+  75:serialparser.c ****     Function must be used because serial data is stored in to ring buffer
+  76:serialparser.c **** */
+  77:serialparser.c **** double readFloat(uint8_t start, uint8_t stop){
+ 283               	.LM14:
+ 284               	.LFBB4:
+ 285 009e AAE0      		ldi r26,lo8(10)
+ 286 00a0 B0E0      		ldi r27,0
+ 287 00a2 E0E0      		ldi r30,lo8(gs(1f))
+ 288 00a4 F0E0      		ldi r31,hi8(gs(1f))
+ 289 00a6 0C94 0000 		jmp __prologue_saves__+((18 - 4) * 2)
+ 290               	1:
+ 291               	/* prologue: function */
+ 292               	/* frame size = 10 */
+ 293               	/* stack size = 14 */
+ 294               	.L__stack_usage = 14
+ 295 00aa E82F      		mov r30,r24
+  78:serialparser.c ****     char buf[10] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0','\0'};
+ 297               	.LM15:
+ 298 00ac 8E01      		movw r16,r28
+ 299 00ae 0F5F      		subi r16,-1
+ 300 00b0 1F4F      		sbci r17,-1
+ 301 00b2 8AE0      		ldi r24,lo8(10)
+ 302 00b4 D801      		movw r26,r16
+ 303               		0:
+ 304 00b6 1D92      		st X+,__zero_reg__
+ 305 00b8 8A95      		dec r24
+ 306 00ba 01F4      		brne 0b
+ 307 00bc D801      		movw r26,r16
+ 308 00be 3AE0      		ldi r19,lo8(10)
+ 309 00c0 3E0F      		add r19,r30
+ 310               	.L31:
+ 311               	.LBB21:
+  79:serialparser.c ****     
+  80:serialparser.c ****     //clearBuffer(buf,5);
+  81:serialparser.c ****     for (uint8_t i=0; i<10; i++){
+  82:serialparser.c ****         buf[i] = buffer[start++];
+ 313               	.LM16:
+ 314 00c2 91E0      		ldi r25,lo8(1)
+ 315 00c4 9E0F      		add r25,r30
+ 316 00c6 F0E0      		ldi r31,0
+ 317 00c8 E050      		subi r30,lo8(-(buffer))
+ 318 00ca F040      		sbci r31,hi8(-(buffer))
+ 319 00cc 2081      		ld r18,Z
+ 320 00ce 2D93      		st X+,r18
+  83:serialparser.c ****         if (start == stop){
+ 322               	.LM17:
+ 323 00d0 9617      		cp r25,r22
+ 324 00d2 01F0      		breq .L30
+ 325 00d4 E92F      		mov r30,r25
+  81:serialparser.c ****         buf[i] = buffer[start++];
+ 327               	.LM18:
+ 328 00d6 9313      		cpse r25,r19
+ 329 00d8 00C0      		rjmp .L31
+ 330               	.L30:
+ 331               	.LBE21:
+  84:serialparser.c ****            i = 10;
+  85:serialparser.c ****         }
+  86:serialparser.c ****     }
+  87:serialparser.c ****     printf(buf);
+ 333               	.LM19:
+ 334 00da 1F93      		push r17
+ 335 00dc 0F93      		push r16
+ 336 00de 0E94 0000 		call printf
+  88:serialparser.c ****     printf("\n");
+ 338               	.LM20:
+ 339 00e2 8AE0      		ldi r24,lo8(10)
+ 340 00e4 90E0      		ldi r25,0
+ 341 00e6 0E94 0000 		call putchar
+  89:serialparser.c ****     return atof(buf);
+ 343               	.LM21:
+ 344 00ea C801      		movw r24,r16
+ 345 00ec 0E94 0000 		call atof
+ 346 00f0 0F90      		pop __tmp_reg__
+ 347 00f2 0F90      		pop __tmp_reg__
+ 348               	/* epilogue start */
+  90:serialparser.c **** }
+ 350               	.LM22:
+ 351 00f4 2A96      		adiw r28,10
+ 352 00f6 E4E0      		ldi r30, lo8(4)
+ 353 00f8 0C94 0000 		jmp __epilogue_restores__ + ((18 - 4) * 2)
+ 358               	.Lscope4:
+ 366               	.global	findParameter
+ 368               	findParameter:
+  91:serialparser.c **** 
+  92:serialparser.c **** //Start and Stop values are pointing to Global ring buffer
+  93:serialparser.c **** uint8_t findParameter(char startchar, char stopchar, char secondstopchar, uint8_t maxlength, uint8_
+ 370               	.LM23:
+ 371               	.LFBB5:
+ 372 00fc EF92      		push r14
+ 373 00fe FF92      		push r15
+ 374 0100 0F93      		push r16
+ 375 0102 1F93      		push r17
+ 376               	/* prologue: function */
+ 377               	/* frame size = 0 */
+ 378               	/* stack size = 4 */
+ 379               	.L__stack_usage = 4
+  94:serialparser.c ****     //Find correct start character
+  95:serialparser.c ****     while(buffer[ring_read] != startchar && ring_read != ring_write){ 
+ 381               	.LM24:
+ 382 0104 00C0      		rjmp .L34
+ 383               	.L47:
+ 385               	.LM25:
+ 386 0106 3091 0000 		lds r19,ring_read
+ 387 010a 9091 0000 		lds r25,ring_write
+ 388 010e 3917      		cp r19,r25
+ 389 0110 01F0      		breq .L36
+  96:serialparser.c ****         ring_read++;
+ 391               	.LM26:
+ 392 0112 9091 0000 		lds r25,ring_read
+ 393 0116 9F5F      		subi r25,lo8(-(1))
+ 394 0118 9093 0000 		sts ring_read,r25
+  97:serialparser.c ****         maxlength --;
+ 396               	.LM27:
+ 397 011c 2150      		subi r18,lo8(-(-1))
+  98:serialparser.c ****         if (maxlength == 0){
+ 399               	.LM28:
+ 400 011e 01F0      		breq .L41
+ 401               	.L34:
+  95:serialparser.c ****         ring_read++;
+ 403               	.LM29:
+ 404 0120 E091 0000 		lds r30,ring_read
+ 405 0124 F0E0      		ldi r31,0
+ 406 0126 E050      		subi r30,lo8(-(buffer))
+ 407 0128 F040      		sbci r31,hi8(-(buffer))
+ 408 012a 9081      		ld r25,Z
+ 409 012c 9813      		cpse r25,r24
+ 410 012e 00C0      		rjmp .L47
+ 411               	.L36:
+  99:serialparser.c ****             return ERROR_MAX_LENGTH;
+ 100:serialparser.c ****         }
+ 101:serialparser.c ****     }
+ 102:serialparser.c ****     if (ring_read == ring_write){
+ 413               	.LM30:
+ 414 0130 9091 0000 		lds r25,ring_read
+ 415 0134 8091 0000 		lds r24,ring_write
+ 416 0138 9817      		cp r25,r24
+ 417 013a 01F0      		breq .L42
+ 418               	.LBB24:
+ 419               	.LBB25:
+ 103:serialparser.c ****         return ERROR_CANNOT_FIND;
+ 104:serialparser.c ****     }
+ 105:serialparser.c **** 
+ 106:serialparser.c ****     ring_read++; ///Next character is what we are looking for
+ 421               	.LM31:
+ 422 013c 8091 0000 		lds r24,ring_read
+ 423 0140 8F5F      		subi r24,lo8(-(1))
+ 424 0142 8093 0000 		sts ring_read,r24
+ 107:serialparser.c **** 
+ 108:serialparser.c ****     //Find stop character
+ 109:serialparser.c ****     *start = ring_read;
+ 426               	.LM32:
+ 427 0146 8091 0000 		lds r24,ring_read
+ 428 014a F801      		movw r30,r16
+ 429 014c 8083      		st Z,r24
+ 430 014e 00C0      		rjmp .L45
+ 431               	.L46:
+ 110:serialparser.c ****     while(buffer[ring_read] != stopchar && buffer[ring_read] != secondstopchar){ //Find next delimi
+ 433               	.LM33:
+ 434 0150 E091 0000 		lds r30,ring_read
+ 435 0154 F0E0      		ldi r31,0
+ 436 0156 E050      		subi r30,lo8(-(buffer))
+ 437 0158 F040      		sbci r31,hi8(-(buffer))
+ 438 015a 8081      		ld r24,Z
+ 439 015c 4817      		cp r20,r24
+ 440 015e 01F0      		breq .L39
+ 111:serialparser.c ****         ring_read++; //Step forward
+ 442               	.LM34:
+ 443 0160 8091 0000 		lds r24,ring_read
+ 444 0164 8F5F      		subi r24,lo8(-(1))
+ 445 0166 8093 0000 		sts ring_read,r24
+ 446               	.L45:
+ 110:serialparser.c ****     while(buffer[ring_read] != stopchar && buffer[ring_read] != secondstopchar){ //Find next delimi
+ 448               	.LM35:
+ 449 016a E091 0000 		lds r30,ring_read
+ 450 016e F0E0      		ldi r31,0
+ 451 0170 E050      		subi r30,lo8(-(buffer))
+ 452 0172 F040      		sbci r31,hi8(-(buffer))
+ 453 0174 8081      		ld r24,Z
+ 454 0176 6813      		cpse r22,r24
+ 455 0178 00C0      		rjmp .L46
+ 456               	.L39:
+ 112:serialparser.c ****     }
+ 113:serialparser.c ****     *stop = ring_read;
+ 458               	.LM36:
+ 459 017a 8091 0000 		lds r24,ring_read
+ 460 017e F701      		movw r30,r14
+ 461 0180 8083      		st Z,r24
+ 462 0182 81E0      		ldi r24,lo8(1)
+ 463               	/* epilogue start */
+ 464               	.LBE25:
+ 465               	.LBE24:
+ 114:serialparser.c ****     
+ 115:serialparser.c ****     return FIND_SUCCESS;
+ 116:serialparser.c **** }
+ 467               	.LM37:
+ 468 0184 1F91      		pop r17
+ 469 0186 0F91      		pop r16
+ 470 0188 FF90      		pop r15
+ 471 018a EF90      		pop r14
+ 472 018c 0895      		ret
+ 473               	.L42:
+ 103:serialparser.c ****     }
+ 475               	.LM38:
+ 476 018e 82E0      		ldi r24,lo8(2)
+ 477               	/* epilogue start */
+ 479               	.LM39:
+ 480 0190 1F91      		pop r17
+ 481 0192 0F91      		pop r16
+ 482 0194 FF90      		pop r15
+ 483 0196 EF90      		pop r14
+ 484 0198 0895      		ret
+ 485               	.L41:
+  99:serialparser.c ****         }
+ 487               	.LM40:
+ 488 019a 83E0      		ldi r24,lo8(3)
+ 489               	/* epilogue start */
+ 491               	.LM41:
+ 492 019c 1F91      		pop r17
+ 493 019e 0F91      		pop r16
+ 494 01a0 FF90      		pop r15
+ 495 01a2 EF90      		pop r14
+ 496 01a4 0895      		ret
+ 498               	.Lscope5:
+ 499               		.section	.rodata.str1.1,"aMS",@progbits,1
+ 500               	.LC0:
+ 501 0000 4F4B 0A00 		.string	"OK\n"
+ 502               	.LC1:
+ 503 0004 4552 520A 		.string	"ERR\n"
+ 503      00
+ 504               	.LC2:
+ 505 0009 4731 3A25 		.string	"G1:%d\n"
+ 505      640A 00
+ 506               	.LC3:
+ 507 0010 4732 3A25 		.string	"G2:%5.2f:%5.2f\n"
+ 507      352E 3266 
+ 507      3A25 352E 
+ 507      3266 0A00 
+ 508               	.LC4:
+ 509 0020 4733 3A25 		.string	"G3:%5.2f:%5.2f\n"
+ 509      352E 3266 
+ 509      3A25 352E 
+ 509      3266 0A00 
+ 510               	.LC5:
+ 511 0030 4734 3A25 		.string	"G4:%d:%d\n"
+ 511      643A 2564 
+ 511      0A00 
+ 512               	.LC6:
+ 513 003a 4125 643A 		.string	"A%d:%d\n"
+ 513      2564 0A00 
+ 514               	.LC7:
+ 515 0042 2564 3A25 		.string	"%d:%d:"
+ 515      643A 00
+ 516               	.LC8:
+ 517 0049 533A 2564 		.string	"S:%d:%d\n"
+ 517      3A25 640A 
+ 517      00
+ 518               		.text
+ 520               	.global	parseCommands
+ 522               	parseCommands:
+ 117:serialparser.c **** 
+ 118:serialparser.c **** void parseCommands(void){
+ 524               	.LM42:
+ 525               	.LFBB6:
+ 526 01a6 A4E0      		ldi r26,lo8(4)
+ 527 01a8 B0E0      		ldi r27,0
+ 528 01aa E0E0      		ldi r30,lo8(gs(1f))
+ 529 01ac F0E0      		ldi r31,hi8(gs(1f))
+ 530 01ae 0C94 0000 		jmp __prologue_saves__+((18 - 18) * 2)
+ 531               	1:
+ 532               	/* prologue: function */
+ 533               	/* frame size = 4 */
+ 534               	/* stack size = 22 */
+ 535               	.L__stack_usage = 22
+ 536               	.LBB26:
+ 119:serialparser.c ****     while (ring_read != ring_write){
+ 120:serialparser.c ****         uint8_t command = buffer[ring_read++];
+ 121:serialparser.c ****         if (command == 'P'){ //PUT new values command: P1:20:40    last  angle:tilt
+ 122:serialparser.c ****             uint8_t start = 0;
+ 123:serialparser.c ****             uint8_t stop = 0;
+ 124:serialparser.c ****                 
+ 125:serialparser.c ****             if (buffer[ring_read] == '1'){    
+ 126:serialparser.c ****                 uint8_t succ = findParameter(':', ':', '\n', 20, &start, &stop);
+ 127:serialparser.c ****                 if (succ == FIND_SUCCESS){
+ 128:serialparser.c ****                     uint8_t asuccess = setAngle(readFloat(start, stop));
+ 129:serialparser.c ****                     succ = findParameter(':', ':', '\n', 20, &start, &stop);
+ 130:serialparser.c ****                     if (succ == FIND_SUCCESS){
+ 131:serialparser.c ****                         uint8_t tsuccess = setTilt(readFloat(start, stop));
+ 132:serialparser.c ****                         if (asuccess == 0 && tsuccess == 0){
+ 133:serialparser.c ****                             fprintf(port,"OK\n");
+ 134:serialparser.c ****                         }
+ 135:serialparser.c ****                         else{
+ 136:serialparser.c ****                             fprintf(port, "ERR\n");
+ 137:serialparser.c ****                         }
+ 138:serialparser.c ****                     }
+ 139:serialparser.c ****                     else{
+ 140:serialparser.c ****                         fprintf(port, "ERR\n");
+ 141:serialparser.c ****                     }
+ 142:serialparser.c ****                 }
+ 143:serialparser.c ****                 else{
+ 144:serialparser.c ****                     fprintf(port,"ERR\n");
+ 145:serialparser.c ****                 }
+ 146:serialparser.c ****             }
+ 147:serialparser.c ****             else{
+ 148:serialparser.c ****                 fprintf(port,"ERR\n");
+ 149:serialparser.c ****             }
+ 150:serialparser.c ****             read_until_line_end();
+ 151:serialparser.c ****         }
+ 152:serialparser.c ****         else if (command == 'G'){ //Get values
+ 153:serialparser.c ****             uint8_t value = buffer[ring_read++]; 
+ 154:serialparser.c ****             if (value == '1'){ //Rread generic info
+ 155:serialparser.c ****                 fprintf(port,"G1:%d\n", SW_VERSION);
+ 156:serialparser.c ****             }
+ 157:serialparser.c ****             else if (value == '2'){ //Read current angle and tilt set_values
+ 158:serialparser.c ****                 fprintf(port,"G2:%5.2f:%5.2f\n", getSetAngle(), getSetTilt());
+ 159:serialparser.c ****             }
+ 160:serialparser.c ****             else if (value == '3'){ //Reads current values from motorctrl -module, actual values
+ 161:serialparser.c ****                 fprintf(port,"G3:%5.2f:%5.2f\n", getAngle(), getTilt());
+ 162:serialparser.c ****             }
+ 163:serialparser.c ****             else if (value == '4'){ //get motor statuses
+ 164:serialparser.c ****                 fprintf(port, "G4:%d:%d\n", getAngleMotorStatus(), getTiltMotorStatus());
+ 165:serialparser.c ****             }
+ 166:serialparser.c ****             else{
+ 167:serialparser.c ****                 fprintf(port,"ERR\n");
+ 168:serialparser.c ****             }
+ 169:serialparser.c ****             read_until_line_end();
+ 170:serialparser.c ****         }
+ 171:serialparser.c ****         else if (command == 'A'){ //ADC read voltage, commands A0\n  A1\n ,A2\n ,A3\n ,A4\n and so 
+ 172:serialparser.c ****             //ring_read++;
+ 173:serialparser.c ****             char buff[2];
+ 174:serialparser.c ****             clearBuffer(buff, 2);
+ 175:serialparser.c ****             buff[0] = buffer[ring_read];
+ 176:serialparser.c ****             uint8_t channel = atoi(buff);
+ 177:serialparser.c ****             if (channel < 8){
+ 178:serialparser.c ****                 fprintf(port, "A%d:%d\n", channel, GetVoltage(channel, 0x40));
+ 179:serialparser.c ****             }
+ 180:serialparser.c ****             else if (channel == 8){
+ 181:serialparser.c ****                 fprintf(port,"A");
+ 182:serialparser.c ****                 for (uint8_t i=0; i<8; i++){
+ 183:serialparser.c ****                     fprintf(port, "%d:%d:", i, GetVoltage(i, 0x40));
+ 184:serialparser.c ****                 }
+ 185:serialparser.c ****                 fprintf(port,"\n");
+ 186:serialparser.c ****             }
+ 187:serialparser.c ****             else{
+ 188:serialparser.c ****                 fprintf(port, "ERR\n");
+ 189:serialparser.c ****             }
+ 190:serialparser.c ****             read_until_line_end();
+ 191:serialparser.c ****         }
+ 192:serialparser.c ****         else if (command == 'S'){ //Read both motor status
+ 193:serialparser.c ****             fprintf(port,"S:%d:%d\n",getAngleMotorStatus(), getTiltMotorStatus());
+ 538               	.LM43:
+ 539 01b2 80E0      		ldi r24,lo8(.LC8)
+ 540 01b4 A82E      		mov r10,r24
+ 541 01b6 80E0      		ldi r24,hi8(.LC8)
+ 542 01b8 B82E      		mov r11,r24
+ 543               	.LBB27:
+ 544               	.LBB28:
+ 183:serialparser.c ****                 }
+ 546               	.LM44:
+ 547 01ba 90E0      		ldi r25,lo8(.LC7)
+ 548 01bc C92E      		mov r12,r25
+ 549 01be 90E0      		ldi r25,hi8(.LC7)
+ 550 01c0 D92E      		mov r13,r25
+ 551               	.LBE28:
+ 178:serialparser.c ****             }
+ 553               	.LM45:
+ 554 01c2 20E0      		ldi r18,lo8(.LC6)
+ 555 01c4 822E      		mov r8,r18
+ 556 01c6 20E0      		ldi r18,hi8(.LC6)
+ 557 01c8 922E      		mov r9,r18
+ 558               	.LBE27:
+ 559               	.LBB32:
+ 164:serialparser.c ****             }
+ 561               	.LM46:
+ 562 01ca 30E0      		ldi r19,lo8(.LC5)
+ 563 01cc 632E      		mov r6,r19
+ 564 01ce 30E0      		ldi r19,hi8(.LC5)
+ 565 01d0 732E      		mov r7,r19
+ 158:serialparser.c ****             }
+ 567               	.LM47:
+ 568 01d2 40E0      		ldi r20,lo8(.LC3)
+ 569 01d4 242E      		mov r2,r20
+ 570 01d6 40E0      		ldi r20,hi8(.LC3)
+ 571 01d8 342E      		mov r3,r20
+ 155:serialparser.c ****             }
+ 573               	.LM48:
+ 574 01da 50E0      		ldi r21,lo8(.LC2)
+ 575 01dc 452E      		mov r4,r21
+ 576 01de 50E0      		ldi r21,hi8(.LC2)
+ 577 01e0 552E      		mov r5,r21
+ 578               	.L49:
+ 579               	.LBE32:
+ 580               	.LBE26:
+ 119:serialparser.c ****         uint8_t command = buffer[ring_read++];
+ 582               	.LM49:
+ 583 01e2 9091 0000 		lds r25,ring_read
+ 584 01e6 8091 0000 		lds r24,ring_write
+ 585 01ea 9817      		cp r25,r24
+ 586 01ec 01F0      		breq .L74
+ 587               	.L68:
+ 588               	.LBB43:
+ 120:serialparser.c ****         if (command == 'P'){ //PUT new values command: P1:20:40    last  angle:tilt
+ 590               	.LM50:
+ 591 01ee E091 0000 		lds r30,ring_read
+ 592 01f2 81E0      		ldi r24,lo8(1)
+ 593 01f4 8E0F      		add r24,r30
+ 594 01f6 8093 0000 		sts ring_read,r24
+ 595 01fa F0E0      		ldi r31,0
+ 596 01fc E050      		subi r30,lo8(-(buffer))
+ 597 01fe F040      		sbci r31,hi8(-(buffer))
+ 598 0200 8081      		ld r24,Z
+ 121:serialparser.c ****             uint8_t start = 0;
+ 600               	.LM51:
+ 601 0202 8035      		cpi r24,lo8(80)
+ 602 0204 01F0      		breq .L75
+ 152:serialparser.c ****             uint8_t value = buffer[ring_read++]; 
+ 604               	.LM52:
+ 605 0206 8734      		cpi r24,lo8(71)
+ 606 0208 01F4      		brne .+2
+ 607 020a 00C0      		rjmp .L76
+ 171:serialparser.c ****             //ring_read++;
+ 609               	.LM53:
+ 610 020c 8134      		cpi r24,lo8(65)
+ 611 020e 01F4      		brne .+2
+ 612 0210 00C0      		rjmp .L77
+ 192:serialparser.c ****             fprintf(port,"S:%d:%d\n",getAngleMotorStatus(), getTiltMotorStatus());
+ 614               	.LM54:
+ 615 0212 8335      		cpi r24,lo8(83)
+ 616 0214 01F4      		brne .L49
+ 618               	.LM55:
+ 619 0216 0E94 0000 		call getTiltMotorStatus
+ 620 021a 182F      		mov r17,r24
+ 621 021c 0E94 0000 		call getAngleMotorStatus
+ 622 0220 1F92      		push __zero_reg__
+ 623 0222 1F93      		push r17
+ 624 0224 1F92      		push __zero_reg__
+ 625 0226 8F93      		push r24
+ 626 0228 BF92      		push r11
+ 627 022a AF92      		push r10
+ 628 022c 8091 0000 		lds r24,port+1
+ 629 0230 8F93      		push r24
+ 630 0232 8091 0000 		lds r24,port
+ 631 0236 8F93      		push r24
+ 632 0238 0E94 0000 		call fprintf
+ 194:serialparser.c ****             read_until_line_end();    
+ 634               	.LM56:
+ 635 023c 0E94 0000 		call read_until_line_end
+ 636 0240 0FB6      		in __tmp_reg__,__SREG__
+ 637 0242 F894      		cli
+ 638 0244 DEBF      		out __SP_H__,r29
+ 639 0246 0FBE      		out __SREG__,__tmp_reg__
+ 640 0248 CDBF      		out __SP_L__,r28
+ 641               	.LBE43:
+ 119:serialparser.c ****         uint8_t command = buffer[ring_read++];
+ 643               	.LM57:
+ 644 024a 9091 0000 		lds r25,ring_read
+ 645 024e 8091 0000 		lds r24,ring_write
+ 646 0252 9813      		cpse r25,r24
+ 647 0254 00C0      		rjmp .L68
+ 648               	.L74:
+ 649               	/* epilogue start */
+ 195:serialparser.c ****         }
+ 196:serialparser.c ****     }
+ 197:serialparser.c **** }
+ 651               	.LM58:
+ 652 0256 2496      		adiw r28,4
+ 653 0258 E2E1      		ldi r30, lo8(18)
+ 654 025a 0C94 0000 		jmp __epilogue_restores__ + ((18 - 18) * 2)
+ 655               	.L75:
+ 656               	.LBB44:
+ 657               	.LBB33:
+ 122:serialparser.c ****             uint8_t stop = 0;
+ 659               	.LM59:
+ 660 025e 1B82      		std Y+3,__zero_reg__
+ 123:serialparser.c ****                 
+ 662               	.LM60:
+ 663 0260 1982      		std Y+1,__zero_reg__
+ 125:serialparser.c ****                 uint8_t succ = findParameter(':', ':', '\n', 20, &start, &stop);
+ 665               	.LM61:
+ 666 0262 E091 0000 		lds r30,ring_read
+ 667 0266 F0E0      		ldi r31,0
+ 668 0268 E050      		subi r30,lo8(-(buffer))
+ 669 026a F040      		sbci r31,hi8(-(buffer))
+ 670 026c 8081      		ld r24,Z
+ 671 026e 8133      		cpi r24,lo8(49)
+ 672 0270 01F4      		brne .+2
+ 673 0272 00C0      		rjmp .L78
+ 674               	.L66:
+ 675               	.LBE33:
+ 676               	.LBB37:
+ 188:serialparser.c ****             }
+ 678               	.LM62:
+ 679 0274 2091 0000 		lds r18,port
+ 680 0278 3091 0000 		lds r19,port+1
+ 681               	.L72:
+ 682 027c 44E0      		ldi r20,lo8(4)
+ 683 027e 50E0      		ldi r21,0
+ 684 0280 61E0      		ldi r22,lo8(1)
+ 685 0282 70E0      		ldi r23,0
+ 686 0284 80E0      		ldi r24,lo8(.LC1)
+ 687 0286 90E0      		ldi r25,hi8(.LC1)
+ 688 0288 0E94 0000 		call fwrite
+ 689               	.L65:
+ 190:serialparser.c ****         }
+ 691               	.LM63:
+ 692 028c 0E94 0000 		call read_until_line_end
+ 693               	.LBE37:
+ 694 0290 00C0      		rjmp .L49
+ 695               	.L76:
+ 696               	.LBB38:
+ 153:serialparser.c ****             if (value == '1'){ //Rread generic info
+ 698               	.LM64:
+ 699 0292 E091 0000 		lds r30,ring_read
+ 700 0296 81E0      		ldi r24,lo8(1)
+ 701 0298 8E0F      		add r24,r30
+ 702 029a 8093 0000 		sts ring_read,r24
+ 703 029e F0E0      		ldi r31,0
+ 704 02a0 E050      		subi r30,lo8(-(buffer))
+ 705 02a2 F040      		sbci r31,hi8(-(buffer))
+ 706 02a4 8081      		ld r24,Z
+ 154:serialparser.c ****                 fprintf(port,"G1:%d\n", SW_VERSION);
+ 708               	.LM65:
+ 709 02a6 8133      		cpi r24,lo8(49)
+ 710 02a8 01F4      		brne .+2
+ 711 02aa 00C0      		rjmp .L79
+ 157:serialparser.c ****                 fprintf(port,"G2:%5.2f:%5.2f\n", getSetAngle(), getSetTilt());
+ 713               	.LM66:
+ 714 02ac 8233      		cpi r24,lo8(50)
+ 715 02ae 01F4      		brne .+2
+ 716 02b0 00C0      		rjmp .L80
+ 160:serialparser.c ****                 fprintf(port,"G3:%5.2f:%5.2f\n", getAngle(), getTilt());
+ 718               	.LM67:
+ 719 02b2 8333      		cpi r24,lo8(51)
+ 720 02b4 01F4      		brne .+2
+ 721 02b6 00C0      		rjmp .L81
+ 163:serialparser.c ****                 fprintf(port, "G4:%d:%d\n", getAngleMotorStatus(), getTiltMotorStatus());
+ 723               	.LM68:
+ 724 02b8 8433      		cpi r24,lo8(52)
+ 725 02ba 01F4      		brne .L66
+ 164:serialparser.c ****             }
+ 727               	.LM69:
+ 728 02bc 0E94 0000 		call getTiltMotorStatus
+ 729 02c0 182F      		mov r17,r24
+ 730 02c2 0E94 0000 		call getAngleMotorStatus
+ 731 02c6 1F92      		push __zero_reg__
+ 732 02c8 1F93      		push r17
+ 733 02ca 1F92      		push __zero_reg__
+ 734 02cc 8F93      		push r24
+ 735 02ce 7F92      		push r7
+ 736 02d0 6F92      		push r6
+ 737               	.L73:
+ 738               	.LBE38:
+ 739               	.LBB39:
+ 178:serialparser.c ****             }
+ 741               	.LM70:
+ 742 02d2 8091 0000 		lds r24,port+1
+ 743 02d6 8F93      		push r24
+ 744 02d8 8091 0000 		lds r24,port
+ 745 02dc 8F93      		push r24
+ 746 02de 0E94 0000 		call fprintf
+ 747 02e2 0FB6      		in __tmp_reg__,__SREG__
+ 748 02e4 F894      		cli
+ 749 02e6 DEBF      		out __SP_H__,r29
+ 750 02e8 0FBE      		out __SREG__,__tmp_reg__
+ 751 02ea CDBF      		out __SP_L__,r28
+ 752 02ec 00C0      		rjmp .L65
+ 753               	.L77:
+ 754               	.LBB29:
+ 755               	.LBB30:
+  26:serialparser.c **** }
+ 757               	.LM71:
+ 758 02ee 1982      		std Y+1,__zero_reg__
+ 759 02f0 1A82      		std Y+2,__zero_reg__
+ 760               	.LBE30:
+ 761               	.LBE29:
+ 175:serialparser.c ****             uint8_t channel = atoi(buff);
+ 763               	.LM72:
+ 764 02f2 E091 0000 		lds r30,ring_read
+ 765 02f6 F0E0      		ldi r31,0
+ 766 02f8 E050      		subi r30,lo8(-(buffer))
+ 767 02fa F040      		sbci r31,hi8(-(buffer))
+ 768 02fc 8081      		ld r24,Z
+ 769 02fe 8983      		std Y+1,r24
+ 176:serialparser.c ****             if (channel < 8){
+ 771               	.LM73:
+ 772 0300 CE01      		movw r24,r28
+ 773 0302 0196      		adiw r24,1
+ 774 0304 0E94 0000 		call atoi
+ 775 0308 8C01      		movw r16,r24
+ 177:serialparser.c ****                 fprintf(port, "A%d:%d\n", channel, GetVoltage(channel, 0x40));
+ 777               	.LM74:
+ 778 030a 8830      		cpi r24,lo8(8)
+ 779 030c 00F4      		brsh .+2
+ 780 030e 00C0      		rjmp .L82
+ 180:serialparser.c ****                 fprintf(port,"A");
+ 782               	.LM75:
+ 783 0310 8830      		cpi r24,lo8(8)
+ 784 0312 01F0      		breq .+2
+ 785 0314 00C0      		rjmp .L66
+ 181:serialparser.c ****                 for (uint8_t i=0; i<8; i++){
+ 787               	.LM76:
+ 788 0316 6091 0000 		lds r22,port
+ 789 031a 7091 0000 		lds r23,port+1
+ 790 031e 81E4      		ldi r24,lo8(65)
+ 791 0320 90E0      		ldi r25,0
+ 792 0322 0E94 0000 		call fputc
+ 793 0326 00E0      		ldi r16,0
+ 794 0328 10E0      		ldi r17,0
+ 795               	.L67:
+ 796               	.LBB31:
+ 183:serialparser.c ****                 }
+ 798               	.LM77:
+ 799 032a 60E4      		ldi r22,lo8(64)
+ 800 032c 802F      		mov r24,r16
+ 801 032e 0E94 0000 		call GetVoltage
+ 802 0332 9F93      		push r25
+ 803 0334 8F93      		push r24
+ 804 0336 1F93      		push r17
+ 805 0338 0F93      		push r16
+ 806 033a DF92      		push r13
+ 807 033c CF92      		push r12
+ 808 033e 8091 0000 		lds r24,port+1
+ 809 0342 8F93      		push r24
+ 810 0344 8091 0000 		lds r24,port
+ 811 0348 8F93      		push r24
+ 812 034a 0E94 0000 		call fprintf
+ 813 034e 0F5F      		subi r16,-1
+ 814 0350 1F4F      		sbci r17,-1
+ 182:serialparser.c ****                     fprintf(port, "%d:%d:", i, GetVoltage(i, 0x40));
+ 816               	.LM78:
+ 817 0352 0FB6      		in __tmp_reg__,__SREG__
+ 818 0354 F894      		cli
+ 819 0356 DEBF      		out __SP_H__,r29
+ 820 0358 0FBE      		out __SREG__,__tmp_reg__
+ 821 035a CDBF      		out __SP_L__,r28
+ 822 035c 0830      		cpi r16,8
+ 823 035e 1105      		cpc r17,__zero_reg__
+ 824 0360 01F4      		brne .L67
+ 825               	.LBE31:
+ 185:serialparser.c ****             }
+ 827               	.LM79:
+ 828 0362 6091 0000 		lds r22,port
+ 829 0366 7091 0000 		lds r23,port+1
+ 830 036a 8AE0      		ldi r24,lo8(10)
+ 831 036c 90E0      		ldi r25,0
+ 832 036e 0E94 0000 		call fputc
+ 833 0372 00C0      		rjmp .L65
+ 834               	.L78:
+ 835               	.LBE39:
+ 836               	.LBB40:
+ 837               	.LBB34:
+ 126:serialparser.c ****                 if (succ == FIND_SUCCESS){
+ 839               	.LM80:
+ 840 0374 CE01      		movw r24,r28
+ 841 0376 0196      		adiw r24,1
+ 842 0378 7C01      		movw r14,r24
+ 843 037a 8E01      		movw r16,r28
+ 844 037c 0D5F      		subi r16,-3
+ 845 037e 1F4F      		sbci r17,-1
+ 846 0380 24E1      		ldi r18,lo8(20)
+ 847 0382 4AE0      		ldi r20,lo8(10)
+ 848 0384 6AE3      		ldi r22,lo8(58)
+ 849 0386 8AE3      		ldi r24,lo8(58)
+ 850 0388 0E94 0000 		call findParameter
+ 127:serialparser.c ****                     uint8_t asuccess = setAngle(readFloat(start, stop));
+ 852               	.LM81:
+ 853 038c 8130      		cpi r24,lo8(1)
+ 854 038e 01F0      		breq .+2
+ 855 0390 00C0      		rjmp .L66
+ 856               	.LBB35:
+ 128:serialparser.c ****                     succ = findParameter(':', ':', '\n', 20, &start, &stop);
+ 858               	.LM82:
+ 859 0392 6981      		ldd r22,Y+1
+ 860 0394 8B81      		ldd r24,Y+3
+ 861 0396 0E94 0000 		call readFloat
+ 862 039a 0E94 0000 		call setAngle
+ 863 039e 8C83      		std Y+4,r24
+ 129:serialparser.c ****                     if (succ == FIND_SUCCESS){
+ 865               	.LM83:
+ 866 03a0 24E1      		ldi r18,lo8(20)
+ 867 03a2 4AE0      		ldi r20,lo8(10)
+ 868 03a4 6AE3      		ldi r22,lo8(58)
+ 869 03a6 8AE3      		ldi r24,lo8(58)
+ 870 03a8 0E94 0000 		call findParameter
+ 130:serialparser.c ****                         uint8_t tsuccess = setTilt(readFloat(start, stop));
+ 872               	.LM84:
+ 873 03ac 8130      		cpi r24,lo8(1)
+ 874 03ae 01F0      		breq .+2
+ 875 03b0 00C0      		rjmp .L66
+ 876               	.LBB36:
+ 131:serialparser.c ****                         if (asuccess == 0 && tsuccess == 0){
+ 878               	.LM85:
+ 879 03b2 6981      		ldd r22,Y+1
+ 880 03b4 8B81      		ldd r24,Y+3
+ 881 03b6 0E94 0000 		call readFloat
+ 882 03ba 0E94 0000 		call setTilt
+ 132:serialparser.c ****                             fprintf(port,"OK\n");
+ 884               	.LM86:
+ 885 03be BC81      		ldd r27,Y+4
+ 133:serialparser.c ****                         }
+ 887               	.LM87:
+ 888 03c0 2091 0000 		lds r18,port
+ 889 03c4 3091 0000 		lds r19,port+1
+ 132:serialparser.c ****                             fprintf(port,"OK\n");
+ 891               	.LM88:
+ 892 03c8 B111      		cpse r27,__zero_reg__
+ 893 03ca 00C0      		rjmp .L72
+ 132:serialparser.c ****                             fprintf(port,"OK\n");
+ 895               	.LM89:
+ 896 03cc 8111      		cpse r24,__zero_reg__
+ 897 03ce 00C0      		rjmp .L72
+ 133:serialparser.c ****                         }
+ 899               	.LM90:
+ 900 03d0 43E0      		ldi r20,lo8(3)
+ 901 03d2 50E0      		ldi r21,0
+ 902 03d4 61E0      		ldi r22,lo8(1)
+ 903 03d6 70E0      		ldi r23,0
+ 904 03d8 80E0      		ldi r24,lo8(.LC0)
+ 905 03da 90E0      		ldi r25,hi8(.LC0)
+ 906 03dc 0E94 0000 		call fwrite
+ 907 03e0 00C0      		rjmp .L65
+ 908               	.L82:
+ 909               	.LBE36:
+ 910               	.LBE35:
+ 911               	.LBE34:
+ 912               	.LBE40:
+ 913               	.LBB41:
+ 178:serialparser.c ****             }
+ 915               	.LM91:
+ 916 03e2 60E4      		ldi r22,lo8(64)
+ 917 03e4 0E94 0000 		call GetVoltage
+ 918 03e8 9F93      		push r25
+ 919 03ea 8F93      		push r24
+ 920 03ec 1127      		clr r17
+ 921 03ee 1F93      		push r17
+ 922 03f0 0F93      		push r16
+ 923 03f2 9F92      		push r9
+ 924 03f4 8F92      		push r8
+ 925 03f6 00C0      		rjmp .L73
+ 926               	.L79:
+ 927               	.LBE41:
+ 928               	.LBB42:
+ 155:serialparser.c ****             }
+ 930               	.LM92:
+ 931 03f8 1F92      		push __zero_reg__
+ 932 03fa 81E0      		ldi r24,lo8(1)
+ 933 03fc 8F93      		push r24
+ 934 03fe 5F92      		push r5
+ 935 0400 4F92      		push r4
+ 936 0402 8091 0000 		lds r24,port+1
+ 937 0406 8F93      		push r24
+ 938 0408 8091 0000 		lds r24,port
+ 939 040c 8F93      		push r24
+ 940 040e 0E94 0000 		call fprintf
+ 941 0412 0F90      		pop __tmp_reg__
+ 942 0414 0F90      		pop __tmp_reg__
+ 943 0416 0F90      		pop __tmp_reg__
+ 944 0418 0F90      		pop __tmp_reg__
+ 945 041a 0F90      		pop __tmp_reg__
+ 946 041c 0F90      		pop __tmp_reg__
+ 947 041e 00C0      		rjmp .L65
+ 948               	.L80:
+ 158:serialparser.c ****             }
+ 950               	.LM93:
+ 951 0420 0E94 0000 		call getSetTilt
+ 952 0424 162F      		mov r17,r22
+ 953 0426 072F      		mov r16,r23
+ 954 0428 F82E      		mov r15,r24
+ 955 042a E92E      		mov r14,r25
+ 956 042c 0E94 0000 		call getSetAngle
+ 957 0430 EF92      		push r14
+ 958 0432 FF92      		push r15
+ 959 0434 0F93      		push r16
+ 960 0436 1F93      		push r17
+ 961 0438 9F93      		push r25
+ 962 043a 8F93      		push r24
+ 963 043c 7F93      		push r23
+ 964 043e 6F93      		push r22
+ 965 0440 3F92      		push r3
+ 966 0442 2F92      		push r2
+ 967               	.L71:
+ 161:serialparser.c ****             }
+ 969               	.LM94:
+ 970 0444 8091 0000 		lds r24,port+1
+ 971 0448 8F93      		push r24
+ 972 044a 8091 0000 		lds r24,port
+ 973 044e 8F93      		push r24
+ 974 0450 0E94 0000 		call fprintf
+ 975 0454 0FB6      		in __tmp_reg__,__SREG__
+ 976 0456 F894      		cli
+ 977 0458 DEBF      		out __SP_H__,r29
+ 978 045a 0FBE      		out __SREG__,__tmp_reg__
+ 979 045c CDBF      		out __SP_L__,r28
+ 980 045e 00C0      		rjmp .L65
+ 981               	.L81:
+ 982 0460 0E94 0000 		call getTilt
+ 983 0464 162F      		mov r17,r22
+ 984 0466 072F      		mov r16,r23
+ 985 0468 F82E      		mov r15,r24
+ 986 046a E92E      		mov r14,r25
+ 987 046c 0E94 0000 		call getAngle
+ 988 0470 EF92      		push r14
+ 989 0472 FF92      		push r15
+ 990 0474 0F93      		push r16
+ 991 0476 1F93      		push r17
+ 992 0478 9F93      		push r25
+ 993 047a 8F93      		push r24
+ 994 047c 7F93      		push r23
+ 995 047e 6F93      		push r22
+ 996 0480 A0E0      		ldi r26,lo8(.LC4)
+ 997 0482 B0E0      		ldi r27,hi8(.LC4)
+ 998 0484 BF93      		push r27
+ 999 0486 AF93      		push r26
+ 1000 0488 00C0      		rjmp .L71
+ 1001               	.LBE42:
+ 1002               	.LBE44:
+ 1052               	.Lscope6:
+ 1054               	.global	__vector_18
+ 1056               	__vector_18:
+  30:serialparser.c **** 	volatile char temp = USART_Receive0();
+ 1058               	.LM95:
+ 1059               	.LFBB7:
+ 1060 048a 1F92      		push r1
+ 1061 048c 0F92      		push r0
+ 1062 048e 0FB6      		in r0,__SREG__
+ 1063 0490 0F92      		push r0
+ 1064 0492 1124      		clr __zero_reg__
+ 1065 0494 2F93      		push r18
+ 1066 0496 3F93      		push r19
+ 1067 0498 4F93      		push r20
+ 1068 049a 5F93      		push r21
+ 1069 049c 6F93      		push r22
+ 1070 049e 7F93      		push r23
+ 1071 04a0 8F93      		push r24
+ 1072 04a2 9F93      		push r25
+ 1073 04a4 AF93      		push r26
+ 1074 04a6 BF93      		push r27
+ 1075 04a8 EF93      		push r30
+ 1076 04aa FF93      		push r31
+ 1077 04ac CF93      		push r28
+ 1078 04ae DF93      		push r29
+ 1079 04b0 1F92      		push __zero_reg__
+ 1080 04b2 CDB7      		in r28,__SP_L__
+ 1081 04b4 DEB7      		in r29,__SP_H__
+ 1082               	/* prologue: Signal */
+ 1083               	/* frame size = 1 */
+ 1084               	/* stack size = 18 */
+ 1085               	.L__stack_usage = 18
+ 1086               	.L84:
+ 1087               	.LBB45:
+ 1088               	.LBB46:
+ 1090               	.Ltext1:
+   1:USART.h       **** #include <string.h>
+   2:USART.h       **** #include <stdio.h>	
+   3:USART.h       **** #include <util/delay.h>	
+   4:USART.h       **** #include <avr/io.h>	
+   5:USART.h       **** 
+   6:USART.h       **** #define USART_FREQ 16000000UL
+   7:USART.h       **** 
+   8:USART.h       **** __attribute__((always_inline)) inline static uint8_t USART_Receive0(void) {
+   9:USART.h       **** 	while ( !(UCSR0A & (1<<RXC0)) );
+ 1092               	.LM96:
+ 1093 04b6 8091 C000 		lds r24,192
+ 1094 04ba 87FF      		sbrs r24,7
+ 1095 04bc 00C0      		rjmp .L84
+  10:USART.h       **** 	return UDR0;
+ 1097               	.LM97:
+ 1098 04be 8091 C600 		lds r24,198
+ 1099               	.LBE46:
+ 1100               	.LBE45:
+ 1102               	.Ltext2:
+  31:serialparser.c **** 	buffer[ring_write++] = temp;
+ 1104               	.LM98:
+ 1105 04c2 8983      		std Y+1,r24
+  32:serialparser.c **** 	if (temp == '\n' || temp == '\r'){
+ 1107               	.LM99:
+ 1108 04c4 E091 0000 		lds r30,ring_write
+ 1109 04c8 81E0      		ldi r24,lo8(1)
+ 1110 04ca 8E0F      		add r24,r30
+ 1111 04cc 8093 0000 		sts ring_write,r24
+ 1112 04d0 F0E0      		ldi r31,0
+ 1113 04d2 8981      		ldd r24,Y+1
+ 1114 04d4 E050      		subi r30,lo8(-(buffer))
+ 1115 04d6 F040      		sbci r31,hi8(-(buffer))
+ 1116 04d8 8083      		st Z,r24
+  33:serialparser.c ****         parseCommands();
+ 1118               	.LM100:
+ 1119 04da 8981      		ldd r24,Y+1
+ 1120 04dc 8A30      		cpi r24,lo8(10)
+ 1121 04de 01F0      		breq .L85
+  33:serialparser.c ****         parseCommands();
+ 1123               	.LM101:
+ 1124 04e0 8981      		ldd r24,Y+1
+ 1125 04e2 8D30      		cpi r24,lo8(13)
+ 1126 04e4 01F0      		breq .L85
+ 1127               	.L83:
+ 1128               	/* epilogue start */
+  36:serialparser.c **** 
+ 1130               	.LM102:
+ 1131 04e6 0F90      		pop __tmp_reg__
+ 1132 04e8 DF91      		pop r29
+ 1133 04ea CF91      		pop r28
+ 1134 04ec FF91      		pop r31
+ 1135 04ee EF91      		pop r30
+ 1136 04f0 BF91      		pop r27
+ 1137 04f2 AF91      		pop r26
+ 1138 04f4 9F91      		pop r25
+ 1139 04f6 8F91      		pop r24
+ 1140 04f8 7F91      		pop r23
+ 1141 04fa 6F91      		pop r22
+ 1142 04fc 5F91      		pop r21
+ 1143 04fe 4F91      		pop r20
+ 1144 0500 3F91      		pop r19
+ 1145 0502 2F91      		pop r18
+ 1146 0504 0F90      		pop r0
+ 1147 0506 0FBE      		out __SREG__,r0
+ 1148 0508 0F90      		pop r0
+ 1149 050a 1F90      		pop r1
+ 1150 050c 1895      		reti
+ 1151               	.L85:
+  34:serialparser.c **** 	}
+ 1153               	.LM103:
+ 1154 050e 0E94 0000 		call parseCommands
+ 1155 0512 00C0      		rjmp .L83
+ 1160               	.Lscope7:
+ 1161               		.comm	port,2,1
+ 1162               		.comm	buffer,256,1
+ 1163               	.global	ring_read
+ 1164               		.section .bss
+ 1167               	ring_read:
+ 1168 0000 00        		.zero	1
+ 1169               	.global	ring_write
+ 1172               	ring_write:
+ 1173 0001 00        		.zero	1
+ 1174               		.comm	motors,182,1
+ 1180               		.text
+ 1182               	.Letext0:
+ 1183               		.ident	"GCC: (GNU) 4.9.2"
+ 1184               	.global __do_copy_data
+ 1185               	.global __do_clear_bss
+DEFINED SYMBOLS
+                            *ABS*:00000000 serialparser.c
+     /tmp/ccLfenUu.s:2      *ABS*:0000003e __SP_H__
+     /tmp/ccLfenUu.s:3      *ABS*:0000003d __SP_L__
+     /tmp/ccLfenUu.s:4      *ABS*:0000003f __SREG__
+     /tmp/ccLfenUu.s:5      *ABS*:00000000 __tmp_reg__
+     /tmp/ccLfenUu.s:6      *ABS*:00000001 __zero_reg__
+     /tmp/ccLfenUu.s:129    .text:00000000 read_until_line_end
+     /tmp/ccLfenUu.s:1167   .bss:00000000 ring_read
+                            *COM*:00000100 buffer
+     /tmp/ccLfenUu.s:1172   .bss:00000001 ring_write
+     /tmp/ccLfenUu.s:172    .text:0000003a initSerialParser
+                            *COM*:00000002 port
+     /tmp/ccLfenUu.s:210    .text:00000054 readInt16
+     /tmp/ccLfenUu.s:281    .text:0000009e readFloat
+     /tmp/ccLfenUu.s:368    .text:000000fc findParameter
+     /tmp/ccLfenUu.s:522    .text:000001a6 parseCommands
+     /tmp/ccLfenUu.s:1056   .text:0000048a __vector_18
+                            *COM*:000000b6 motors
+
+UNDEFINED SYMBOLS
+__prologue_saves__
+atoi
+__epilogue_restores__
+printf
+putchar
+atof
+getTiltMotorStatus
+getAngleMotorStatus
+fprintf
+fwrite
+fputc
+GetVoltage
+setAngle
+setTilt
+getSetTilt
+getSetAngle
+getTilt
+getAngle
+__do_copy_data
+__do_clear_bss

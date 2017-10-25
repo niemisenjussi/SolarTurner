@@ -1,0 +1,2836 @@
+   1               		.file	"motorctrl.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__tmp_reg__ = 0
+   6               	__zero_reg__ = 1
+   8               		.text
+   9               	.Ltext0:
+ 111               	.global	__floatunsisf
+ 112               	.global	__mulsf3
+ 113               	.global	__floatsisf
+ 114               	.global	__subsf3
+ 115               	.global	__addsf3
+ 116               	.global	__divsf3
+ 119               	.global	angleConversion
+ 121               	angleConversion:
+   1:motorctrl.c   **** #include "motorctrl.h"
+   2:motorctrl.c   **** #include "ADC.h"
+   3:motorctrl.c   **** 
+   4:motorctrl.c   **** // Forward and backward definition, can be changed
+   5:motorctrl.c   **** #define FORWARD 1
+   6:motorctrl.c   **** #define BACKWARD 0
+   7:motorctrl.c   **** 
+   8:motorctrl.c   **** #define FAST_PWM 0x03
+   9:motorctrl.c   **** #define OC0A 0x80
+  10:motorctrl.c   **** #define OC0B 0x20
+  11:motorctrl.c   **** #define OC2A 0x80
+  12:motorctrl.c   **** #define OC2B 0x20
+  13:motorctrl.c   **** 
+  14:motorctrl.c   **** #define SHUTDOWN 0 //shutdown motor
+  15:motorctrl.c   **** #define ANGLE_MAX_PWM 200 //Angle motor
+  16:motorctrl.c   **** #define TILT_MAX_PWM 200 //Tilt MOTOR
+  17:motorctrl.c   **** #define PRESCALER 0x04 //PWM frequency divider
+  18:motorctrl.c   **** #define NUMOFSAMPLES 4 //ADC averaging sample count
+  19:motorctrl.c   **** 
+  20:motorctrl.c   **** #define MOTOR_HYSTERESIS 2.0  //IN Degrees
+  21:motorctrl.c   **** #define MOTOR_ACCELERATION 5000 //wait time in micro seconds between speed increase
+  22:motorctrl.c   **** #define MOTOR_ACC_STEP 1 //8bit PWM step per acceleration.
+  23:motorctrl.c   **** 
+  24:motorctrl.c   **** //SET limits for the API
+  25:motorctrl.c   **** #define MIN_ANGLE 100.0
+  26:motorctrl.c   **** #define ANGLE_RANGE 160.0
+  27:motorctrl.c   **** #define MIN_TILT 5.0
+  28:motorctrl.c   **** #define TILT_RANGE 85.0
+  29:motorctrl.c   **** 
+  30:motorctrl.c   **** #define ANGLE_REFERENCE 180.0 //heading by default South
+  31:motorctrl.c   **** #define TILT_REFERENCE 5.0   //Tilted 5 degrees upward frow vertical angle
+  32:motorctrl.c   **** 
+  33:motorctrl.c   **** #define ANGLE_MOTOR_TIMEOUT 15000 // in milliseconds
+  34:motorctrl.c   **** #define TILT_MOTOR_TIMEOUT 15000  // in milliseconds
+  35:motorctrl.c   **** 
+  36:motorctrl.c   **** //Angle correction factors, all values are millimeters
+  37:motorctrl.c   **** #define ANGLE_X 700L //Distance from center to actuator lower point
+  38:motorctrl.c   **** #define ANGLE_C 190L //Distance from center to actuator far end
+  39:motorctrl.c   **** #define ANGLE_Y 50L  //Offset distance from X to outside
+  40:motorctrl.c   **** 
+  41:motorctrl.c   **** #define TILT_X 540L //Distance from center to actuator lower point
+  42:motorctrl.c   **** #define TILT_C 170L //Distance from center to actuator far end
+  43:motorctrl.c   **** #define TILT_Y 50L  //Offset distance from X to outside
+  44:motorctrl.c   **** 
+  45:motorctrl.c   **** //Define Actuator physical measurements
+  46:motorctrl.c   **** #define ACTUATOR_A_MIN_LENGTH 515L //absolute value
+  47:motorctrl.c   **** #define ACTUATOR_A_MAX_LENGTH 890L //absolute value
+  48:motorctrl.c   **** #define ACTUATOR_A_MIN_LIMIT  520L //Minimum limit where actuator can go
+  49:motorctrl.c   **** #define ACTUATOR_A_MAX_LIMIT  880L //Maximum limit where actuator can go
+  50:motorctrl.c   **** 
+  51:motorctrl.c   **** #define ACTUATOR_B_MIN_LENGTH 340L  //375 515-890               //pidempi
+  52:motorctrl.c   **** #define ACTUATOR_B_MAX_LENGTH 540L  //200 340-540 pisimmällään  //lyhyempi
+  53:motorctrl.c   **** #define ACTUATOR_B_MIN_LIMIT  350L
+  54:motorctrl.c   **** #define ACTUATOR_B_MAX_LIMIT  530L
+  55:motorctrl.c   **** 
+  56:motorctrl.c   **** #define MOTOR_A 0
+  57:motorctrl.c   **** #define MOTOR_B 1
+  58:motorctrl.c   **** //Define Actuator ADC Channels for Motor_A and Motor_b
+  59:motorctrl.c   **** 
+  60:motorctrl.c   **** #define ACTUATOR_ADC_A 0
+  61:motorctrl.c   **** #define ACTUATOR_ADC_B 1
+  62:motorctrl.c   **** #define ACTUATOR_CURRENT_ADC_A 6 
+  63:motorctrl.c   **** #define ACTUATOR_CURRENT_ADC_B 7
+  64:motorctrl.c   **** //Defines which actuator is controlling tilt and which controls angular movements
+  65:motorctrl.c   **** 
+  66:motorctrl.c   **** #define ANGLE_MOTOR MOTOR_A
+  67:motorctrl.c   **** #define TILT_MOTOR MOTOR_B 
+  68:motorctrl.c   **** 
+  69:motorctrl.c   **** #define ANGLE_ACTUATOR_ADC ACTUATOR_ADC_A
+  70:motorctrl.c   **** #define TILT_ACTUATOR_ADC  ACTUATOR_ADC_B
+  71:motorctrl.c   **** #define ANGLE_ACTUATOR_CURRENT_ADC ACTUATOR_CURRENT_ADC_A
+  72:motorctrl.c   **** #define TILT_ACTUATOR_CURRENT_ADC ACTUATOR_CURRENT_ADC_B
+  73:motorctrl.c   **** 
+  74:motorctrl.c   **** #define ANGLE_ACTUATOR_MIN_LENGTH ACTUATOR_A_MIN_LENGTH
+  75:motorctrl.c   **** #define ANGLE_ACTUATOR_MAX_LENGTH ACTUATOR_A_MAX_LENGTH
+  76:motorctrl.c   **** #define ANGLE_ACTUATOR_MIN_LIMIT ACTUATOR_A_MIN_LIMIT
+  77:motorctrl.c   **** #define ANGLE_ACTUATOR_MAX_LIMIT ACTUATOR_A_MAX_LIMIT
+  78:motorctrl.c   **** 
+  79:motorctrl.c   **** #define TILT_ACTUATOR_MIN_LENGTH ACTUATOR_B_MIN_LENGTH
+  80:motorctrl.c   **** #define TILT_ACTUATOR_MAX_LENGTH ACTUATOR_B_MAX_LENGTH
+  81:motorctrl.c   **** #define TILT_ACTUATOR_MIN_LIMIT ACTUATOR_B_MIN_LIMIT
+  82:motorctrl.c   **** #define TILT_ACTUATOR_MAX_LIMIT ACTUATOR_B_MAX_LIMIT
+  83:motorctrl.c   **** 
+  84:motorctrl.c   **** 
+  85:motorctrl.c   **** //Initialize MOTOR A, Angle motor
+  86:motorctrl.c   **** //volatile motor motors[NUM_OF_MOTORS];
+  87:motorctrl.c   **** //extern motor motors[NUM_OF_MOTORS];
+  88:motorctrl.c   **** 
+  89:motorctrl.c   **** //returns motor final calculated position in degrees
+  90:motorctrl.c   **** float getMotorPosition(motor *m){
+  91:motorctrl.c   ****     uint16_t alen = getActuatorLength(m);
+  92:motorctrl.c   ****     float aoffset = m->angle_correction(alen);
+  93:motorctrl.c   ****     return m->angle_reference + aoffset;
+  94:motorctrl.c   ****     /*
+  95:motorctrl.c   ****         example reference angle motor = 180
+  96:motorctrl.c   ****         aoffset between -90 to 90
+  97:motorctrl.c   ****         -90 when actuator is minimum position
+  98:motorctrl.c   ****         90 when actuator is at max position
+  99:motorctrl.c   **** 
+ 100:motorctrl.c   ****         ie. 180 + offset => 180 + -90 = 90  degrees
+ 101:motorctrl.c   ****         ie. 180 +offset  => 180 + +90 = 270 degrees
+ 102:motorctrl.c   ****     */
+ 103:motorctrl.c   **** }
+ 104:motorctrl.c   **** 
+ 105:motorctrl.c   **** //returns motor actuator length in millimeters
+ 106:motorctrl.c   **** uint16_t getActuatorLength(motor *m){
+ 107:motorctrl.c   ****     uint16_t voltage = AVGVoltage(m->actuator_adc_channel, 0x40, NUMOFSAMPLES);
+ 108:motorctrl.c   ****     float effective_range = (m->actuator_max_length - m->actuator_min_length); 
+ 109:motorctrl.c   ****     uint16_t length =  m->actuator_min_length + (effective_range / 1024)*voltage; //volts per degre
+ 110:motorctrl.c   ****     
+ 111:motorctrl.c   ****     if (length >= m->actuator_max_limit){
+ 112:motorctrl.c   ****         m->status = MAX_LIMIT;
+ 113:motorctrl.c   ****         motorControl(m, FORWARD, SHUTDOWN); //SHUTDOWN motor
+ 114:motorctrl.c   ****         //TODO do something when limits are crossed
+ 115:motorctrl.c   ****     }
+ 116:motorctrl.c   ****     else if(length <= m->actuator_min_limit){
+ 117:motorctrl.c   ****         m->status = MIN_LIMIT;
+ 118:motorctrl.c   ****         motorControl(m, FORWARD, SHUTDOWN);  //SHUTDOWN motor
+ 119:motorctrl.c   ****     }
+ 120:motorctrl.c   ****     return length;
+ 121:motorctrl.c   **** }
+ 122:motorctrl.c   **** 
+ 123:motorctrl.c   **** uint16_t getTiltActuatorCurrentLength(void){
+ 124:motorctrl.c   ****     return getActuatorLength(&motors[TILT_MOTOR]);
+ 125:motorctrl.c   **** }
+ 126:motorctrl.c   **** 
+ 127:motorctrl.c   **** uint16_t getAngleActuatorCurrentLength(void){
+ 128:motorctrl.c   ****     return getActuatorLength(&motors[ANGLE_MOTOR]);
+ 129:motorctrl.c   **** }
+ 130:motorctrl.c   **** 
+ 131:motorctrl.c   **** 
+ 132:motorctrl.c   **** 
+ 133:motorctrl.c   **** //Returns angle between -90.0 - 90.0, input value is in millimeters.
+ 134:motorctrl.c   **** float angleConversion(uint16_t f){
+ 123               	.LM0:
+ 124               	.LFBB1:
+ 125 0000 4F92      		push r4
+ 126 0002 5F92      		push r5
+ 127 0004 6F92      		push r6
+ 128 0006 7F92      		push r7
+ 129 0008 8F92      		push r8
+ 130 000a 9F92      		push r9
+ 131 000c AF92      		push r10
+ 132 000e BF92      		push r11
+ 133 0010 CF92      		push r12
+ 134 0012 DF92      		push r13
+ 135 0014 EF92      		push r14
+ 136 0016 FF92      		push r15
+ 137               	/* prologue: function */
+ 138               	/* frame size = 0 */
+ 139               	/* stack size = 12 */
+ 140               	.L__stack_usage = 12
+ 141 0018 AC01      		movw r20,r24
+ 135:motorctrl.c   ****     return -(360L*atan((2*ANGLE_C*ANGLE_X-sqrt((-ANGLE_C*ANGLE_C + 2*ANGLE_C*f - pow(f,2.0) + ANGLE
+ 143               	.LM1:
+ 144 001a 9C01      		movw r18,r24
+ 145 001c ACE7      		ldi r26,lo8(124)
+ 146 001e B1E0      		ldi r27,lo8(1)
+ 147 0020 0E94 0000 		call __umulhisi3
+ 148 0024 6B01      		movw r12,r22
+ 149 0026 7C01      		movw r14,r24
+ 150 0028 BA01      		movw r22,r20
+ 151 002a 80E0      		ldi r24,0
+ 152 002c 90E0      		ldi r25,0
+ 153 002e 0E94 0000 		call __floatunsisf
+ 154 0032 9B01      		movw r18,r22
+ 155 0034 AC01      		movw r20,r24
+ 156 0036 0E94 0000 		call __mulsf3
+ 157 003a 4B01      		movw r8,r22
+ 158 003c 5C01      		movw r10,r24
+ 159 003e C701      		movw r24,r14
+ 160 0040 B601      		movw r22,r12
+ 161 0042 6450      		subi r22,4
+ 162 0044 7D48      		sbci r23,-115
+ 163 0046 8109      		sbc r24,__zero_reg__
+ 164 0048 9109      		sbc r25,__zero_reg__
+ 136:motorctrl.c   ****             (ANGLE_C*ANGLE_C + 2*ANGLE_C*f + pow(f,2.0)- ANGLE_X*ANGLE_X - ANGLE_Y*ANGLE_Y)))/
+ 166               	.LM2:
+ 167 004a 24E0      		ldi r18,4
+ 168 004c C20E      		add r12,r18
+ 169 004e 2DE8      		ldi r18,-115
+ 170 0050 D21E      		adc r13,r18
+ 171 0052 E11C      		adc r14,__zero_reg__
+ 172 0054 F11C      		adc r15,__zero_reg__
+ 135:motorctrl.c   ****     return -(360L*atan((2*ANGLE_C*ANGLE_X-sqrt((-ANGLE_C*ANGLE_C + 2*ANGLE_C*f - pow(f,2.0) + ANGLE
+ 174               	.LM3:
+ 175 0056 0E94 0000 		call __floatsisf
+ 176 005a A501      		movw r20,r10
+ 177 005c 9401      		movw r18,r8
+ 178 005e 0E94 0000 		call __subsf3
+ 179 0062 20E0      		ldi r18,0
+ 180 0064 32E4      		ldi r19,lo8(66)
+ 181 0066 4FEE      		ldi r20,lo8(-17)
+ 182 0068 58E4      		ldi r21,lo8(72)
+ 183 006a 0E94 0000 		call __addsf3
+ 184 006e 20E0      		ldi r18,0
+ 185 0070 30E4      		ldi r19,lo8(64)
+ 186 0072 4CE1      		ldi r20,lo8(28)
+ 187 0074 55E4      		ldi r21,lo8(69)
+ 188 0076 0E94 0000 		call __addsf3
+ 189 007a 2B01      		movw r4,r22
+ 190 007c 3C01      		movw r6,r24
+ 192               	.LM4:
+ 193 007e C701      		movw r24,r14
+ 194 0080 B601      		movw r22,r12
+ 195 0082 0E94 0000 		call __floatsisf
+ 196 0086 A501      		movw r20,r10
+ 197 0088 9401      		movw r18,r8
+ 198 008a 0E94 0000 		call __addsf3
+ 199 008e 20E0      		ldi r18,0
+ 200 0090 32E4      		ldi r19,lo8(66)
+ 201 0092 4FEE      		ldi r20,lo8(-17)
+ 202 0094 58E4      		ldi r21,lo8(72)
+ 203 0096 0E94 0000 		call __subsf3
+ 204 009a 20E0      		ldi r18,0
+ 205 009c 30E4      		ldi r19,lo8(64)
+ 206 009e 4CE1      		ldi r20,lo8(28)
+ 207 00a0 55E4      		ldi r21,lo8(69)
+ 208 00a2 0E94 0000 		call __subsf3
+ 209 00a6 9B01      		movw r18,r22
+ 210 00a8 AC01      		movw r20,r24
+ 135:motorctrl.c   ****     return -(360L*atan((2*ANGLE_C*ANGLE_X-sqrt((-ANGLE_C*ANGLE_C + 2*ANGLE_C*f - pow(f,2.0) + ANGLE
+ 212               	.LM5:
+ 213 00aa C301      		movw r24,r6
+ 214 00ac B201      		movw r22,r4
+ 215 00ae 0E94 0000 		call __mulsf3
+ 216 00b2 0E94 0000 		call sqrt
+ 217 00b6 9B01      		movw r18,r22
+ 218 00b8 AC01      		movw r20,r24
+ 219 00ba 60E0      		ldi r22,0
+ 220 00bc 72EE      		ldi r23,lo8(-30)
+ 221 00be 81E8      		ldi r24,lo8(-127)
+ 222 00c0 98E4      		ldi r25,lo8(72)
+ 223 00c2 0E94 0000 		call __subsf3
+ 224 00c6 6B01      		movw r12,r22
+ 225 00c8 7C01      		movw r14,r24
+ 137:motorctrl.c   ****             (ANGLE_C*ANGLE_C + 2*ANGLE_C*ANGLE_Y - pow(f,2.0) + ANGLE_X*ANGLE_X + ANGLE_Y*ANGLE_Y))
+ 227               	.LM6:
+ 228 00ca A501      		movw r20,r10
+ 229 00cc 9401      		movw r18,r8
+ 230 00ce 60E0      		ldi r22,0
+ 231 00d0 7CE3      		ldi r23,lo8(60)
+ 232 00d2 87E5      		ldi r24,lo8(87)
+ 233 00d4 97E4      		ldi r25,lo8(71)
+ 234 00d6 0E94 0000 		call __subsf3
+ 235 00da 20E0      		ldi r18,0
+ 236 00dc 32E4      		ldi r19,lo8(66)
+ 237 00de 4FEE      		ldi r20,lo8(-17)
+ 238 00e0 58E4      		ldi r21,lo8(72)
+ 239 00e2 0E94 0000 		call __addsf3
+ 240 00e6 20E0      		ldi r18,0
+ 241 00e8 30E4      		ldi r19,lo8(64)
+ 242 00ea 4CE1      		ldi r20,lo8(28)
+ 243 00ec 55E4      		ldi r21,lo8(69)
+ 244 00ee 0E94 0000 		call __addsf3
+ 245 00f2 9B01      		movw r18,r22
+ 246 00f4 AC01      		movw r20,r24
+ 135:motorctrl.c   ****     return -(360L*atan((2*ANGLE_C*ANGLE_X-sqrt((-ANGLE_C*ANGLE_C + 2*ANGLE_C*f - pow(f,2.0) + ANGLE
+ 248               	.LM7:
+ 249 00f6 C701      		movw r24,r14
+ 250 00f8 B601      		movw r22,r12
+ 251 00fa 0E94 0000 		call __divsf3
+ 252 00fe 0E94 0000 		call atan
+ 253 0102 20E0      		ldi r18,0
+ 254 0104 30E0      		ldi r19,0
+ 255 0106 44EB      		ldi r20,lo8(-76)
+ 256 0108 53E4      		ldi r21,lo8(67)
+ 257 010a 0E94 0000 		call __mulsf3
+ 258 010e 9058      		subi r25,0x80
+ 259 0110 2BED      		ldi r18,lo8(-37)
+ 260 0112 3FE0      		ldi r19,lo8(15)
+ 261 0114 49E4      		ldi r20,lo8(73)
+ 262 0116 50E4      		ldi r21,lo8(64)
+ 263 0118 0E94 0000 		call __divsf3
+ 264               	/* epilogue start */
+ 138:motorctrl.c   **** }
+ 266               	.LM8:
+ 267 011c FF90      		pop r15
+ 268 011e EF90      		pop r14
+ 269 0120 DF90      		pop r13
+ 270 0122 CF90      		pop r12
+ 271 0124 BF90      		pop r11
+ 272 0126 AF90      		pop r10
+ 273 0128 9F90      		pop r9
+ 274 012a 8F90      		pop r8
+ 275 012c 7F90      		pop r7
+ 276 012e 6F90      		pop r6
+ 277 0130 5F90      		pop r5
+ 278 0132 4F90      		pop r4
+ 279 0134 0895      		ret
+ 281               	.Lscope1:
+ 284               	.global	tiltConversion
+ 286               	tiltConversion:
+ 139:motorctrl.c   **** 
+ 140:motorctrl.c   **** //Returns tilt angle between 0 to 90 degrees positive. input values in millimeters 
+ 141:motorctrl.c   **** float tiltConversion(uint16_t f){
+ 288               	.LM9:
+ 289               	.LFBB2:
+ 290 0136 4F92      		push r4
+ 291 0138 5F92      		push r5
+ 292 013a 6F92      		push r6
+ 293 013c 7F92      		push r7
+ 294 013e 8F92      		push r8
+ 295 0140 9F92      		push r9
+ 296 0142 AF92      		push r10
+ 297 0144 BF92      		push r11
+ 298 0146 CF92      		push r12
+ 299 0148 DF92      		push r13
+ 300 014a EF92      		push r14
+ 301 014c FF92      		push r15
+ 302               	/* prologue: function */
+ 303               	/* frame size = 0 */
+ 304               	/* stack size = 12 */
+ 305               	.L__stack_usage = 12
+ 306 014e AC01      		movw r20,r24
+ 142:motorctrl.c   ****     return 90-(360L*atan((2*TILT_C*TILT_X-sqrt((-TILT_C*TILT_C + 2*TILT_C*f - pow(f,2.0) + TILT_X*T
+ 308               	.LM10:
+ 309 0150 9C01      		movw r18,r24
+ 310 0152 A4E5      		ldi r26,lo8(84)
+ 311 0154 B1E0      		ldi r27,lo8(1)
+ 312 0156 0E94 0000 		call __umulhisi3
+ 313 015a 6B01      		movw r12,r22
+ 314 015c 7C01      		movw r14,r24
+ 315 015e BA01      		movw r22,r20
+ 316 0160 80E0      		ldi r24,0
+ 317 0162 90E0      		ldi r25,0
+ 318 0164 0E94 0000 		call __floatunsisf
+ 319 0168 9B01      		movw r18,r22
+ 320 016a AC01      		movw r20,r24
+ 321 016c 0E94 0000 		call __mulsf3
+ 322 0170 4B01      		movw r8,r22
+ 323 0172 5C01      		movw r10,r24
+ 324 0174 C701      		movw r24,r14
+ 325 0176 B601      		movw r22,r12
+ 326 0178 645E      		subi r22,-28
+ 327 017a 7047      		sbci r23,112
+ 328 017c 8109      		sbc r24,__zero_reg__
+ 329 017e 9109      		sbc r25,__zero_reg__
+ 143:motorctrl.c   ****               (TILT_C*TILT_C + 2*TILT_C*f + pow(f,2.0)- TILT_X*TILT_X - TILT_Y*TILT_Y)))/
+ 331               	.LM11:
+ 332 0180 24EE      		ldi r18,-28
+ 333 0182 C20E      		add r12,r18
+ 334 0184 20E7      		ldi r18,112
+ 335 0186 D21E      		adc r13,r18
+ 336 0188 E11C      		adc r14,__zero_reg__
+ 337 018a F11C      		adc r15,__zero_reg__
+ 142:motorctrl.c   ****     return 90-(360L*atan((2*TILT_C*TILT_X-sqrt((-TILT_C*TILT_C + 2*TILT_C*f - pow(f,2.0) + TILT_X*T
+ 339               	.LM12:
+ 340 018c 0E94 0000 		call __floatsisf
+ 341 0190 A501      		movw r20,r10
+ 342 0192 9401      		movw r18,r8
+ 343 0194 0E94 0000 		call __subsf3
+ 344 0198 20E0      		ldi r18,0
+ 345 019a 32E6      		ldi r19,lo8(98)
+ 346 019c 4EE8      		ldi r20,lo8(-114)
+ 347 019e 58E4      		ldi r21,lo8(72)
+ 348 01a0 0E94 0000 		call __addsf3
+ 349 01a4 20E0      		ldi r18,0
+ 350 01a6 30E4      		ldi r19,lo8(64)
+ 351 01a8 4CE1      		ldi r20,lo8(28)
+ 352 01aa 55E4      		ldi r21,lo8(69)
+ 353 01ac 0E94 0000 		call __addsf3
+ 354 01b0 2B01      		movw r4,r22
+ 355 01b2 3C01      		movw r6,r24
+ 357               	.LM13:
+ 358 01b4 C701      		movw r24,r14
+ 359 01b6 B601      		movw r22,r12
+ 360 01b8 0E94 0000 		call __floatsisf
+ 361 01bc A501      		movw r20,r10
+ 362 01be 9401      		movw r18,r8
+ 363 01c0 0E94 0000 		call __addsf3
+ 364 01c4 20E0      		ldi r18,0
+ 365 01c6 32E6      		ldi r19,lo8(98)
+ 366 01c8 4EE8      		ldi r20,lo8(-114)
+ 367 01ca 58E4      		ldi r21,lo8(72)
+ 368 01cc 0E94 0000 		call __subsf3
+ 369 01d0 20E0      		ldi r18,0
+ 370 01d2 30E4      		ldi r19,lo8(64)
+ 371 01d4 4CE1      		ldi r20,lo8(28)
+ 372 01d6 55E4      		ldi r21,lo8(69)
+ 373 01d8 0E94 0000 		call __subsf3
+ 374 01dc 9B01      		movw r18,r22
+ 375 01de AC01      		movw r20,r24
+ 142:motorctrl.c   ****     return 90-(360L*atan((2*TILT_C*TILT_X-sqrt((-TILT_C*TILT_C + 2*TILT_C*f - pow(f,2.0) + TILT_X*T
+ 377               	.LM14:
+ 378 01e0 C301      		movw r24,r6
+ 379 01e2 B201      		movw r22,r4
+ 380 01e4 0E94 0000 		call __mulsf3
+ 381 01e8 0E94 0000 		call sqrt
+ 382 01ec 9B01      		movw r18,r22
+ 383 01ee AC01      		movw r20,r24
+ 384 01f0 60E0      		ldi r22,0
+ 385 01f2 7CE4      		ldi r23,lo8(76)
+ 386 01f4 83E3      		ldi r24,lo8(51)
+ 387 01f6 98E4      		ldi r25,lo8(72)
+ 388 01f8 0E94 0000 		call __subsf3
+ 389 01fc 6B01      		movw r12,r22
+ 390 01fe 7C01      		movw r14,r24
+ 144:motorctrl.c   ****               (TILT_C*TILT_C + 2*TILT_C*TILT_Y - pow(f,2.0) + TILT_X*TILT_X + TILT_Y*TILT_Y)))/M_PI
+ 392               	.LM15:
+ 393 0200 A501      		movw r20,r10
+ 394 0202 9401      		movw r18,r8
+ 395 0204 60E0      		ldi r22,0
+ 396 0206 7CE4      		ldi r23,lo8(76)
+ 397 0208 83E3      		ldi r24,lo8(51)
+ 398 020a 97E4      		ldi r25,lo8(71)
+ 399 020c 0E94 0000 		call __subsf3
+ 400 0210 20E0      		ldi r18,0
+ 401 0212 32E6      		ldi r19,lo8(98)
+ 402 0214 4EE8      		ldi r20,lo8(-114)
+ 403 0216 58E4      		ldi r21,lo8(72)
+ 404 0218 0E94 0000 		call __addsf3
+ 405 021c 20E0      		ldi r18,0
+ 406 021e 30E4      		ldi r19,lo8(64)
+ 407 0220 4CE1      		ldi r20,lo8(28)
+ 408 0222 55E4      		ldi r21,lo8(69)
+ 409 0224 0E94 0000 		call __addsf3
+ 410 0228 9B01      		movw r18,r22
+ 411 022a AC01      		movw r20,r24
+ 142:motorctrl.c   ****     return 90-(360L*atan((2*TILT_C*TILT_X-sqrt((-TILT_C*TILT_C + 2*TILT_C*f - pow(f,2.0) + TILT_X*T
+ 413               	.LM16:
+ 414 022c C701      		movw r24,r14
+ 415 022e B601      		movw r22,r12
+ 416 0230 0E94 0000 		call __divsf3
+ 417 0234 0E94 0000 		call atan
+ 418 0238 20E0      		ldi r18,0
+ 419 023a 30E0      		ldi r19,0
+ 420 023c 44EB      		ldi r20,lo8(-76)
+ 421 023e 53E4      		ldi r21,lo8(67)
+ 422 0240 0E94 0000 		call __mulsf3
+ 424               	.LM17:
+ 425 0244 2BED      		ldi r18,lo8(-37)
+ 426 0246 3FE0      		ldi r19,lo8(15)
+ 427 0248 49E4      		ldi r20,lo8(73)
+ 428 024a 50E4      		ldi r21,lo8(64)
+ 429 024c 0E94 0000 		call __divsf3
+ 430 0250 9B01      		movw r18,r22
+ 431 0252 AC01      		movw r20,r24
+ 142:motorctrl.c   ****     return 90-(360L*atan((2*TILT_C*TILT_X-sqrt((-TILT_C*TILT_C + 2*TILT_C*f - pow(f,2.0) + TILT_X*T
+ 433               	.LM18:
+ 434 0254 60E0      		ldi r22,0
+ 435 0256 70E0      		ldi r23,0
+ 436 0258 84EB      		ldi r24,lo8(-76)
+ 437 025a 92E4      		ldi r25,lo8(66)
+ 438 025c 0E94 0000 		call __subsf3
+ 439               	/* epilogue start */
+ 145:motorctrl.c   **** }
+ 441               	.LM19:
+ 442 0260 FF90      		pop r15
+ 443 0262 EF90      		pop r14
+ 444 0264 DF90      		pop r13
+ 445 0266 CF90      		pop r12
+ 446 0268 BF90      		pop r11
+ 447 026a AF90      		pop r10
+ 448 026c 9F90      		pop r9
+ 449 026e 8F90      		pop r8
+ 450 0270 7F90      		pop r7
+ 451 0272 6F90      		pop r6
+ 452 0274 5F90      		pop r5
+ 453 0276 4F90      		pop r4
+ 454 0278 0895      		ret
+ 456               	.Lscope2:
+ 458               	.global	getAngle
+ 460               	getAngle:
+ 146:motorctrl.c   **** 
+ 147:motorctrl.c   **** 
+ 148:motorctrl.c   **** float getAngle(void){
+ 462               	.LM20:
+ 463               	.LFBB3:
+ 464               	/* prologue: function */
+ 465               	/* frame size = 0 */
+ 466               	/* stack size = 0 */
+ 467               	.L__stack_usage = 0
+ 149:motorctrl.c   ****     return motors[ANGLE_MOTOR].current_position;
+ 469               	.LM21:
+ 470 027a 6091 0000 		lds r22,motors+45
+ 471 027e 7091 0000 		lds r23,motors+45+1
+ 472 0282 8091 0000 		lds r24,motors+45+2
+ 473 0286 9091 0000 		lds r25,motors+45+3
+ 150:motorctrl.c   **** }
+ 475               	.LM22:
+ 476 028a 0895      		ret
+ 478               	.Lscope3:
+ 480               	.global	getTilt
+ 482               	getTilt:
+ 151:motorctrl.c   **** 
+ 152:motorctrl.c   **** float getTilt(void){
+ 484               	.LM23:
+ 485               	.LFBB4:
+ 486               	/* prologue: function */
+ 487               	/* frame size = 0 */
+ 488               	/* stack size = 0 */
+ 489               	.L__stack_usage = 0
+ 153:motorctrl.c   ****     return motors[TILT_MOTOR].current_position;
+ 491               	.LM24:
+ 492 028c 6091 0000 		lds r22,motors+136
+ 493 0290 7091 0000 		lds r23,motors+136+1
+ 494 0294 8091 0000 		lds r24,motors+136+2
+ 495 0298 9091 0000 		lds r25,motors+136+3
+ 154:motorctrl.c   **** }
+ 497               	.LM25:
+ 498 029c 0895      		ret
+ 500               	.Lscope4:
+ 501               	.global	__gesf2
+ 502               	.global	__lesf2
+ 505               	.global	setAngle
+ 507               	setAngle:
+ 155:motorctrl.c   **** 
+ 156:motorctrl.c   **** /*
+ 157:motorctrl.c   ****     This function is used to set wanted Angle value
+ 158:motorctrl.c   **** */
+ 159:motorctrl.c   **** uint8_t setAngle(float angle){
+ 509               	.LM26:
+ 510               	.LFBB5:
+ 511 029e 8F92      		push r8
+ 512 02a0 9F92      		push r9
+ 513 02a2 AF92      		push r10
+ 514 02a4 BF92      		push r11
+ 515 02a6 CF92      		push r12
+ 516 02a8 DF92      		push r13
+ 517 02aa EF92      		push r14
+ 518 02ac FF92      		push r15
+ 519               	/* prologue: function */
+ 520               	/* frame size = 0 */
+ 521               	/* stack size = 8 */
+ 522               	.L__stack_usage = 8
+ 523 02ae 6B01      		movw r12,r22
+ 524 02b0 7C01      		movw r14,r24
+ 525               	.LBB23:
+ 526               	.LBB24:
+ 160:motorctrl.c   ****     return setMotorPosition(&motors[ANGLE_MOTOR], angle);
+ 161:motorctrl.c   **** }
+ 162:motorctrl.c   **** 
+ 163:motorctrl.c   **** /*
+ 164:motorctrl.c   ****     This function is used to set wanted TILT angle
+ 165:motorctrl.c   **** */
+ 166:motorctrl.c   **** uint8_t setTilt(float tilt){
+ 167:motorctrl.c   ****     return setMotorPosition(&motors[TILT_MOTOR], tilt);
+ 168:motorctrl.c   **** }
+ 169:motorctrl.c   **** 
+ 170:motorctrl.c   **** uint8_t setMotorPosition(motor *m, float angle){
+ 171:motorctrl.c   ****     //vefify that angle is in between valid range
+ 172:motorctrl.c   ****     if (angle >= m->min_angle && angle <= (m->min_angle + m->angle_range)){
+ 528               	.LM27:
+ 529 02b2 8090 0000 		lds r8,motors+64
+ 530 02b6 9090 0000 		lds r9,motors+64+1
+ 531 02ba A090 0000 		lds r10,motors+64+2
+ 532 02be B090 0000 		lds r11,motors+64+3
+ 533 02c2 A501      		movw r20,r10
+ 534 02c4 9401      		movw r18,r8
+ 535 02c6 0E94 0000 		call __gesf2
+ 536 02ca 87FD      		sbrc r24,7
+ 537 02cc 00C0      		rjmp .L14
+ 538 02ce 2091 0000 		lds r18,motors+68
+ 539 02d2 3091 0000 		lds r19,motors+68+1
+ 540 02d6 4091 0000 		lds r20,motors+68+2
+ 541 02da 5091 0000 		lds r21,motors+68+3
+ 542 02de C501      		movw r24,r10
+ 543 02e0 B401      		movw r22,r8
+ 544 02e2 0E94 0000 		call __addsf3
+ 545 02e6 9B01      		movw r18,r22
+ 546 02e8 AC01      		movw r20,r24
+ 547 02ea C701      		movw r24,r14
+ 548 02ec B601      		movw r22,r12
+ 549 02ee 0E94 0000 		call __lesf2
+ 550 02f2 1816      		cp __zero_reg__,r24
+ 551 02f4 04F0      		brlt .L14
+ 173:motorctrl.c   ****         m->set_position = angle;
+ 553               	.LM28:
+ 554 02f6 C092 0000 		sts motors+49,r12
+ 555 02fa D092 0000 		sts motors+49+1,r13
+ 556 02fe E092 0000 		sts motors+49+2,r14
+ 557 0302 F092 0000 		sts motors+49+3,r15
+ 174:motorctrl.c   ****         m->timeout_value = 0; //Clear timeout value on every angle change
+ 559               	.LM29:
+ 560 0306 1092 0000 		sts motors+86+1,__zero_reg__
+ 561 030a 1092 0000 		sts motors+86,__zero_reg__
+ 175:motorctrl.c   ****         return 0;
+ 563               	.LM30:
+ 564 030e 80E0      		ldi r24,0
+ 565 0310 00C0      		rjmp .L6
+ 566               	.L14:
+ 176:motorctrl.c   ****     }
+ 177:motorctrl.c   ****     else{
+ 178:motorctrl.c   ****         return 1;
+ 568               	.LM31:
+ 569 0312 81E0      		ldi r24,lo8(1)
+ 570               	.L6:
+ 571               	/* epilogue start */
+ 572               	.LBE24:
+ 573               	.LBE23:
+ 161:motorctrl.c   **** 
+ 575               	.LM32:
+ 576 0314 FF90      		pop r15
+ 577 0316 EF90      		pop r14
+ 578 0318 DF90      		pop r13
+ 579 031a CF90      		pop r12
+ 580 031c BF90      		pop r11
+ 581 031e AF90      		pop r10
+ 582 0320 9F90      		pop r9
+ 583 0322 8F90      		pop r8
+ 584 0324 0895      		ret
+ 586               	.Lscope5:
+ 589               	.global	setTilt
+ 591               	setTilt:
+ 166:motorctrl.c   ****     return setMotorPosition(&motors[TILT_MOTOR], tilt);
+ 593               	.LM33:
+ 594               	.LFBB6:
+ 595 0326 8F92      		push r8
+ 596 0328 9F92      		push r9
+ 597 032a AF92      		push r10
+ 598 032c BF92      		push r11
+ 599 032e CF92      		push r12
+ 600 0330 DF92      		push r13
+ 601 0332 EF92      		push r14
+ 602 0334 FF92      		push r15
+ 603               	/* prologue: function */
+ 604               	/* frame size = 0 */
+ 605               	/* stack size = 8 */
+ 606               	.L__stack_usage = 8
+ 607 0336 6B01      		movw r12,r22
+ 608 0338 7C01      		movw r14,r24
+ 609               	.LBB25:
+ 610               	.LBB26:
+ 172:motorctrl.c   ****         m->set_position = angle;
+ 612               	.LM34:
+ 613 033a 8090 0000 		lds r8,motors+155
+ 614 033e 9090 0000 		lds r9,motors+155+1
+ 615 0342 A090 0000 		lds r10,motors+155+2
+ 616 0346 B090 0000 		lds r11,motors+155+3
+ 617 034a A501      		movw r20,r10
+ 618 034c 9401      		movw r18,r8
+ 619 034e 0E94 0000 		call __gesf2
+ 620 0352 87FD      		sbrc r24,7
+ 621 0354 00C0      		rjmp .L25
+ 622 0356 2091 0000 		lds r18,motors+159
+ 623 035a 3091 0000 		lds r19,motors+159+1
+ 624 035e 4091 0000 		lds r20,motors+159+2
+ 625 0362 5091 0000 		lds r21,motors+159+3
+ 626 0366 C501      		movw r24,r10
+ 627 0368 B401      		movw r22,r8
+ 628 036a 0E94 0000 		call __addsf3
+ 629 036e 9B01      		movw r18,r22
+ 630 0370 AC01      		movw r20,r24
+ 631 0372 C701      		movw r24,r14
+ 632 0374 B601      		movw r22,r12
+ 633 0376 0E94 0000 		call __lesf2
+ 634 037a 1816      		cp __zero_reg__,r24
+ 635 037c 04F0      		brlt .L25
+ 173:motorctrl.c   ****         m->timeout_value = 0; //Clear timeout value on every angle change
+ 637               	.LM35:
+ 638 037e C092 0000 		sts motors+140,r12
+ 639 0382 D092 0000 		sts motors+140+1,r13
+ 640 0386 E092 0000 		sts motors+140+2,r14
+ 641 038a F092 0000 		sts motors+140+3,r15
+ 174:motorctrl.c   ****         return 0;
+ 643               	.LM36:
+ 644 038e 1092 0000 		sts motors+177+1,__zero_reg__
+ 645 0392 1092 0000 		sts motors+177,__zero_reg__
+ 175:motorctrl.c   ****     }
+ 647               	.LM37:
+ 648 0396 80E0      		ldi r24,0
+ 649 0398 00C0      		rjmp .L17
+ 650               	.L25:
+ 652               	.LM38:
+ 653 039a 81E0      		ldi r24,lo8(1)
+ 654               	.L17:
+ 655               	/* epilogue start */
+ 656               	.LBE26:
+ 657               	.LBE25:
+ 168:motorctrl.c   **** 
+ 659               	.LM39:
+ 660 039c FF90      		pop r15
+ 661 039e EF90      		pop r14
+ 662 03a0 DF90      		pop r13
+ 663 03a2 CF90      		pop r12
+ 664 03a4 BF90      		pop r11
+ 665 03a6 AF90      		pop r10
+ 666 03a8 9F90      		pop r9
+ 667 03aa 8F90      		pop r8
+ 668 03ac 0895      		ret
+ 670               	.Lscope6:
+ 674               	.global	setMotorPosition
+ 676               	setMotorPosition:
+ 170:motorctrl.c   ****     //vefify that angle is in between valid range
+ 678               	.LM40:
+ 679               	.LFBB7:
+ 680 03ae 8F92      		push r8
+ 681 03b0 9F92      		push r9
+ 682 03b2 AF92      		push r10
+ 683 03b4 BF92      		push r11
+ 684 03b6 CF92      		push r12
+ 685 03b8 DF92      		push r13
+ 686 03ba EF92      		push r14
+ 687 03bc FF92      		push r15
+ 688 03be CF93      		push r28
+ 689 03c0 DF93      		push r29
+ 690               	/* prologue: function */
+ 691               	/* frame size = 0 */
+ 692               	/* stack size = 10 */
+ 693               	.L__stack_usage = 10
+ 694 03c2 EC01      		movw r28,r24
+ 695 03c4 6A01      		movw r12,r20
+ 696 03c6 7B01      		movw r14,r22
+ 172:motorctrl.c   ****         m->set_position = angle;
+ 698               	.LM41:
+ 699 03c8 FC01      		movw r30,r24
+ 700 03ca E05C      		subi r30,-64
+ 701 03cc FF4F      		sbci r31,-1
+ 702 03ce 8080      		ld r8,Z
+ 703 03d0 9180      		ldd r9,Z+1
+ 704 03d2 A280      		ldd r10,Z+2
+ 705 03d4 B380      		ldd r11,Z+3
+ 706 03d6 9A01      		movw r18,r20
+ 707 03d8 AB01      		movw r20,r22
+ 708 03da C501      		movw r24,r10
+ 709 03dc B401      		movw r22,r8
+ 710 03de 0E94 0000 		call __lesf2
+ 711 03e2 1816      		cp __zero_reg__,r24
+ 712 03e4 04F0      		brlt .L35
+ 172:motorctrl.c   ****         m->set_position = angle;
+ 714               	.LM42:
+ 715 03e6 FE01      		movw r30,r28
+ 716 03e8 EC5B      		subi r30,-68
+ 717 03ea FF4F      		sbci r31,-1
+ 718 03ec 2081      		ld r18,Z
+ 719 03ee 3181      		ldd r19,Z+1
+ 720 03f0 4281      		ldd r20,Z+2
+ 721 03f2 5381      		ldd r21,Z+3
+ 722 03f4 C501      		movw r24,r10
+ 723 03f6 B401      		movw r22,r8
+ 724 03f8 0E94 0000 		call __addsf3
+ 725 03fc 9B01      		movw r18,r22
+ 726 03fe AC01      		movw r20,r24
+ 727 0400 C701      		movw r24,r14
+ 728 0402 B601      		movw r22,r12
+ 729 0404 0E94 0000 		call __lesf2
+ 730 0408 1816      		cp __zero_reg__,r24
+ 731 040a 04F0      		brlt .L35
+ 173:motorctrl.c   ****         m->timeout_value = 0; //Clear timeout value on every angle change
+ 733               	.LM43:
+ 734 040c C9AA      		std Y+49,r12
+ 735 040e DAAA      		std Y+50,r13
+ 736 0410 EBAA      		std Y+51,r14
+ 737 0412 FCAA      		std Y+52,r15
+ 174:motorctrl.c   ****         return 0;
+ 739               	.LM44:
+ 740 0414 CA5A      		subi r28,-86
+ 741 0416 DF4F      		sbci r29,-1
+ 742 0418 1982      		std Y+1,__zero_reg__
+ 743 041a 1882      		st Y,__zero_reg__
+ 175:motorctrl.c   ****     }
+ 745               	.LM45:
+ 746 041c 80E0      		ldi r24,0
+ 747 041e 00C0      		rjmp .L27
+ 748               	.L35:
+ 750               	.LM46:
+ 751 0420 81E0      		ldi r24,lo8(1)
+ 752               	.L27:
+ 753               	/* epilogue start */
+ 179:motorctrl.c   ****     }
+ 180:motorctrl.c   **** }   
+ 755               	.LM47:
+ 756 0422 DF91      		pop r29
+ 757 0424 CF91      		pop r28
+ 758 0426 FF90      		pop r15
+ 759 0428 EF90      		pop r14
+ 760 042a DF90      		pop r13
+ 761 042c CF90      		pop r12
+ 762 042e BF90      		pop r11
+ 763 0430 AF90      		pop r10
+ 764 0432 9F90      		pop r9
+ 765 0434 8F90      		pop r8
+ 766 0436 0895      		ret
+ 768               	.Lscope7:
+ 770               	.global	getSetAngle
+ 772               	getSetAngle:
+ 181:motorctrl.c   **** 
+ 182:motorctrl.c   **** /*
+ 183:motorctrl.c   ****     Returns current Angle Set value
+ 184:motorctrl.c   **** */
+ 185:motorctrl.c   **** float getSetAngle(void){
+ 774               	.LM48:
+ 775               	.LFBB8:
+ 776               	/* prologue: function */
+ 777               	/* frame size = 0 */
+ 778               	/* stack size = 0 */
+ 779               	.L__stack_usage = 0
+ 186:motorctrl.c   ****     return motors[ANGLE_MOTOR].set_position;
+ 781               	.LM49:
+ 782 0438 6091 0000 		lds r22,motors+49
+ 783 043c 7091 0000 		lds r23,motors+49+1
+ 784 0440 8091 0000 		lds r24,motors+49+2
+ 785 0444 9091 0000 		lds r25,motors+49+3
+ 187:motorctrl.c   **** }
+ 787               	.LM50:
+ 788 0448 0895      		ret
+ 790               	.Lscope8:
+ 792               	.global	getSetTilt
+ 794               	getSetTilt:
+ 188:motorctrl.c   **** 
+ 189:motorctrl.c   **** /*
+ 190:motorctrl.c   ****     Returns current Tilt Set value  
+ 191:motorctrl.c   **** */
+ 192:motorctrl.c   **** float getSetTilt(void){
+ 796               	.LM51:
+ 797               	.LFBB9:
+ 798               	/* prologue: function */
+ 799               	/* frame size = 0 */
+ 800               	/* stack size = 0 */
+ 801               	.L__stack_usage = 0
+ 193:motorctrl.c   ****     return motors[TILT_MOTOR].set_position;
+ 803               	.LM52:
+ 804 044a 6091 0000 		lds r22,motors+140
+ 805 044e 7091 0000 		lds r23,motors+140+1
+ 806 0452 8091 0000 		lds r24,motors+140+2
+ 807 0456 9091 0000 		lds r25,motors+140+3
+ 194:motorctrl.c   **** }
+ 809               	.LM53:
+ 810 045a 0895      		ret
+ 812               	.Lscope9:
+ 814               	.global	getAngleMotorStatus
+ 816               	getAngleMotorStatus:
+ 195:motorctrl.c   **** 
+ 196:motorctrl.c   **** /*
+ 197:motorctrl.c   ****     Returns Angle motor status  
+ 198:motorctrl.c   **** */
+ 199:motorctrl.c   **** motor_status getAngleMotorStatus(void){
+ 818               	.LM54:
+ 819               	.LFBB10:
+ 820               	/* prologue: function */
+ 821               	/* frame size = 0 */
+ 822               	/* stack size = 0 */
+ 823               	.L__stack_usage = 0
+ 200:motorctrl.c   ****     return motors[ANGLE_MOTOR].status;
+ 201:motorctrl.c   **** }
+ 825               	.LM55:
+ 826 045c 8091 0000 		lds r24,motors+88
+ 827 0460 0895      		ret
+ 829               	.Lscope10:
+ 831               	.global	getTiltMotorStatus
+ 833               	getTiltMotorStatus:
+ 202:motorctrl.c   **** 
+ 203:motorctrl.c   **** /*
+ 204:motorctrl.c   ****     Returns Tilt motor status,   
+ 205:motorctrl.c   **** */
+ 206:motorctrl.c   **** motor_status getTiltMotorStatus(void){
+ 835               	.LM56:
+ 836               	.LFBB11:
+ 837               	/* prologue: function */
+ 838               	/* frame size = 0 */
+ 839               	/* stack size = 0 */
+ 840               	.L__stack_usage = 0
+ 207:motorctrl.c   ****     return motors[TILT_MOTOR].status;
+ 208:motorctrl.c   **** }
+ 842               	.LM57:
+ 843 0462 8091 0000 		lds r24,motors+179
+ 844 0466 0895      		ret
+ 846               	.Lscope11:
+ 849               	.global	delayLoop_us
+ 851               	delayLoop_us:
+ 209:motorctrl.c   **** 
+ 210:motorctrl.c   **** /*
+ 211:motorctrl.c   ****     This function controls angle and tilt motors
+ 212:motorctrl.c   ****     It reads actual Angle and Tilt values using ADC
+ 213:motorctrl.c   ****     Then it Adjust motor PWM to correct direction and leaves it there.
+ 214:motorctrl.c   ****     This function must be called n. times per second
+ 215:motorctrl.c   **** */
+ 216:motorctrl.c   **** motor_status motorController(void){
+ 217:motorctrl.c   ****     //Update current motor positions
+ 218:motorctrl.c   ****     uint8_t status = 0;
+ 219:motorctrl.c   ****     for (uint8_t i = 0; i < NUM_OF_MOTORS; i++){
+ 220:motorctrl.c   ****         motors[i].current_position = getMotorPosition(&motors[i]); 
+ 221:motorctrl.c   ****         motorControlLoop(&motors[i]);
+ 222:motorctrl.c   ****         status += motors[i].status; //Collect status from all motors
+ 223:motorctrl.c   ****     }
+ 224:motorctrl.c   ****     return status;
+ 225:motorctrl.c   **** }
+ 226:motorctrl.c   **** 
+ 227:motorctrl.c   **** //This is motorcontrol loop which is called n. times per second.
+ 228:motorctrl.c   **** void motorControlLoop(motor *m){    
+ 229:motorctrl.c   ****     //Check if we have been running too long
+ 230:motorctrl.c   ****     if (m->timeout_value >= m->timeout_setting){
+ 231:motorctrl.c   ****         m->status = TIMEOUT_ERROR;
+ 232:motorctrl.c   ****         motorControl(m, BACKWARD, 0); //Shutdown motor if it has been running too long.
+ 233:motorctrl.c   ****         return;
+ 234:motorctrl.c   ****     }
+ 235:motorctrl.c   **** 
+ 236:motorctrl.c   ****     //Set position is higher than current
+ 237:motorctrl.c   ****     if (m->set_position > m->current_position + m->angle_hysteresis && m->status != MAX_LIMIT){ //C
+ 238:motorctrl.c   ****         motorControl(m, FORWARD, m->max_pwm);
+ 239:motorctrl.c   ****         m->timeout_value ++; //update timeout variables
+ 240:motorctrl.c   ****         m->status = RUNNING_FORWARD;
+ 241:motorctrl.c   ****     }
+ 242:motorctrl.c   ****     else if (m->set_position < m->current_position - m->angle_hysteresis && m->status != MIN_LIMIT)
+ 243:motorctrl.c   ****         motorControl(m, BACKWARD, m->max_pwm);
+ 244:motorctrl.c   ****         m->timeout_value ++;
+ 245:motorctrl.c   ****         m->status = RUNNING_BACKWARD;
+ 246:motorctrl.c   ****     }
+ 247:motorctrl.c   ****     else{ //Motor is close enough wanted position, Shutdown motor
+ 248:motorctrl.c   ****         motorControl(m, BACKWARD, 0);
+ 249:motorctrl.c   ****         m->timeout_value = 0; //Clear timeout
+ 250:motorctrl.c   ****         m->status = STATUS_OK;
+ 251:motorctrl.c   ****     }
+ 252:motorctrl.c   **** }
+ 253:motorctrl.c   **** 
+ 254:motorctrl.c   **** void delayLoop_us(uint16_t delay){
+ 853               	.LM58:
+ 854               	.LFBB12:
+ 855               	/* prologue: function */
+ 856               	/* frame size = 0 */
+ 857               	/* stack size = 0 */
+ 858               	.L__stack_usage = 0
+ 859               	.LBB27:
+ 255:motorctrl.c   ****     for (uint16_t i = 0; i < delay/50; i++){
+ 861               	.LM59:
+ 862 0468 9C01      		movw r18,r24
+ 863 046a 3695      		lsr r19
+ 864 046c 2795      		ror r18
+ 865 046e ABE7      		ldi r26,lo8(123)
+ 866 0470 B4E1      		ldi r27,lo8(20)
+ 867 0472 0E94 0000 		call __umulhisi3
+ 868 0476 9695      		lsr r25
+ 869 0478 8795      		ror r24
+ 870 047a 0097      		sbiw r24,0
+ 871 047c 01F0      		breq .L40
+ 872 047e 20E0      		ldi r18,0
+ 873 0480 30E0      		ldi r19,0
+ 874               	.L41:
+ 875               	.LBB28:
+ 876               	.LBB29:
+ 878               	.Ltext1:
+   1:/usr/lib/avr/include/util/delay.h **** /* Copyright (c) 2002, Marek Michalkiewicz
+   2:/usr/lib/avr/include/util/delay.h ****    Copyright (c) 2004,2005,2007 Joerg Wunsch
+   3:/usr/lib/avr/include/util/delay.h ****    Copyright (c) 2007  Florin-Viorel Petrov
+   4:/usr/lib/avr/include/util/delay.h ****    All rights reserved.
+   5:/usr/lib/avr/include/util/delay.h **** 
+   6:/usr/lib/avr/include/util/delay.h ****    Redistribution and use in source and binary forms, with or without
+   7:/usr/lib/avr/include/util/delay.h ****    modification, are permitted provided that the following conditions are met:
+   8:/usr/lib/avr/include/util/delay.h **** 
+   9:/usr/lib/avr/include/util/delay.h ****    * Redistributions of source code must retain the above copyright
+  10:/usr/lib/avr/include/util/delay.h ****      notice, this list of conditions and the following disclaimer.
+  11:/usr/lib/avr/include/util/delay.h **** 
+  12:/usr/lib/avr/include/util/delay.h ****    * Redistributions in binary form must reproduce the above copyright
+  13:/usr/lib/avr/include/util/delay.h ****      notice, this list of conditions and the following disclaimer in
+  14:/usr/lib/avr/include/util/delay.h ****      the documentation and/or other materials provided with the
+  15:/usr/lib/avr/include/util/delay.h ****      distribution.
+  16:/usr/lib/avr/include/util/delay.h **** 
+  17:/usr/lib/avr/include/util/delay.h ****    * Neither the name of the copyright holders nor the names of
+  18:/usr/lib/avr/include/util/delay.h ****      contributors may be used to endorse or promote products derived
+  19:/usr/lib/avr/include/util/delay.h ****      from this software without specific prior written permission.
+  20:/usr/lib/avr/include/util/delay.h **** 
+  21:/usr/lib/avr/include/util/delay.h ****   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  22:/usr/lib/avr/include/util/delay.h ****   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  23:/usr/lib/avr/include/util/delay.h ****   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  24:/usr/lib/avr/include/util/delay.h ****   ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  25:/usr/lib/avr/include/util/delay.h ****   LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  26:/usr/lib/avr/include/util/delay.h ****   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  27:/usr/lib/avr/include/util/delay.h ****   SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  28:/usr/lib/avr/include/util/delay.h ****   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  29:/usr/lib/avr/include/util/delay.h ****   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  30:/usr/lib/avr/include/util/delay.h ****   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  31:/usr/lib/avr/include/util/delay.h ****   POSSIBILITY OF SUCH DAMAGE. */
+  32:/usr/lib/avr/include/util/delay.h **** 
+  33:/usr/lib/avr/include/util/delay.h **** /* $Id$ */
+  34:/usr/lib/avr/include/util/delay.h **** 
+  35:/usr/lib/avr/include/util/delay.h **** #ifndef _UTIL_DELAY_H_
+  36:/usr/lib/avr/include/util/delay.h **** #define _UTIL_DELAY_H_ 1
+  37:/usr/lib/avr/include/util/delay.h **** 
+  38:/usr/lib/avr/include/util/delay.h **** #ifndef __HAS_DELAY_CYCLES
+  39:/usr/lib/avr/include/util/delay.h **** #define __HAS_DELAY_CYCLES 1
+  40:/usr/lib/avr/include/util/delay.h **** #endif
+  41:/usr/lib/avr/include/util/delay.h **** 
+  42:/usr/lib/avr/include/util/delay.h **** #include <inttypes.h>
+  43:/usr/lib/avr/include/util/delay.h **** #include <util/delay_basic.h>
+  44:/usr/lib/avr/include/util/delay.h **** #include <math.h>
+  45:/usr/lib/avr/include/util/delay.h **** 
+  46:/usr/lib/avr/include/util/delay.h **** /** \file */
+  47:/usr/lib/avr/include/util/delay.h **** /** \defgroup util_delay <util/delay.h>: Convenience functions for busy-wait delay loops
+  48:/usr/lib/avr/include/util/delay.h ****     \code
+  49:/usr/lib/avr/include/util/delay.h ****     #define F_CPU 1000000UL  // 1 MHz
+  50:/usr/lib/avr/include/util/delay.h ****     //#define F_CPU 14.7456E6
+  51:/usr/lib/avr/include/util/delay.h ****     #include <util/delay.h>
+  52:/usr/lib/avr/include/util/delay.h ****     \endcode
+  53:/usr/lib/avr/include/util/delay.h **** 
+  54:/usr/lib/avr/include/util/delay.h ****     \note As an alternative method, it is possible to pass the
+  55:/usr/lib/avr/include/util/delay.h ****     F_CPU macro down to the compiler from the Makefile.
+  56:/usr/lib/avr/include/util/delay.h ****     Obviously, in that case, no \c \#define statement should be
+  57:/usr/lib/avr/include/util/delay.h ****     used.
+  58:/usr/lib/avr/include/util/delay.h **** 
+  59:/usr/lib/avr/include/util/delay.h ****     The functions in this header file are wrappers around the basic
+  60:/usr/lib/avr/include/util/delay.h ****     busy-wait functions from <util/delay_basic.h>.  They are meant as
+  61:/usr/lib/avr/include/util/delay.h ****     convenience functions where actual time values can be specified
+  62:/usr/lib/avr/include/util/delay.h ****     rather than a number of cycles to wait for.  The idea behind is
+  63:/usr/lib/avr/include/util/delay.h ****     that compile-time constant expressions will be eliminated by
+  64:/usr/lib/avr/include/util/delay.h ****     compiler optimization so floating-point expressions can be used
+  65:/usr/lib/avr/include/util/delay.h ****     to calculate the number of delay cycles needed based on the CPU
+  66:/usr/lib/avr/include/util/delay.h ****     frequency passed by the macro F_CPU.
+  67:/usr/lib/avr/include/util/delay.h **** 
+  68:/usr/lib/avr/include/util/delay.h ****     \note In order for these functions to work as intended, compiler
+  69:/usr/lib/avr/include/util/delay.h ****     optimizations <em>must</em> be enabled, and the delay time
+  70:/usr/lib/avr/include/util/delay.h ****     <em>must</em> be an expression that is a known constant at
+  71:/usr/lib/avr/include/util/delay.h ****     compile-time.  If these requirements are not met, the resulting
+  72:/usr/lib/avr/include/util/delay.h ****     delay will be much longer (and basically unpredictable), and
+  73:/usr/lib/avr/include/util/delay.h ****     applications that otherwise do not use floating-point calculations
+  74:/usr/lib/avr/include/util/delay.h ****     will experience severe code bloat by the floating-point library
+  75:/usr/lib/avr/include/util/delay.h ****     routines linked into the application.
+  76:/usr/lib/avr/include/util/delay.h **** 
+  77:/usr/lib/avr/include/util/delay.h ****     The functions available allow the specification of microsecond, and
+  78:/usr/lib/avr/include/util/delay.h ****     millisecond delays directly, using the application-supplied macro
+  79:/usr/lib/avr/include/util/delay.h ****     F_CPU as the CPU clock frequency (in Hertz).
+  80:/usr/lib/avr/include/util/delay.h **** 
+  81:/usr/lib/avr/include/util/delay.h **** */
+  82:/usr/lib/avr/include/util/delay.h **** 
+  83:/usr/lib/avr/include/util/delay.h **** #if !defined(__DOXYGEN__)
+  84:/usr/lib/avr/include/util/delay.h **** static inline void _delay_us(double __us) __attribute__((always_inline));
+  85:/usr/lib/avr/include/util/delay.h **** static inline void _delay_ms(double __ms) __attribute__((always_inline));
+  86:/usr/lib/avr/include/util/delay.h **** #endif
+  87:/usr/lib/avr/include/util/delay.h **** 
+  88:/usr/lib/avr/include/util/delay.h **** #ifndef F_CPU
+  89:/usr/lib/avr/include/util/delay.h **** /* prevent compiler error by supplying a default */
+  90:/usr/lib/avr/include/util/delay.h **** # warning "F_CPU not defined for <util/delay.h>"
+  91:/usr/lib/avr/include/util/delay.h **** # define F_CPU 1000000UL
+  92:/usr/lib/avr/include/util/delay.h **** #endif
+  93:/usr/lib/avr/include/util/delay.h **** 
+  94:/usr/lib/avr/include/util/delay.h **** #ifndef __OPTIMIZE__
+  95:/usr/lib/avr/include/util/delay.h **** # warning "Compiler optimizations disabled; functions from <util/delay.h> won't work as designed"
+  96:/usr/lib/avr/include/util/delay.h **** #endif
+  97:/usr/lib/avr/include/util/delay.h **** 
+  98:/usr/lib/avr/include/util/delay.h **** #if __HAS_DELAY_CYCLES && defined(__OPTIMIZE__) && \
+  99:/usr/lib/avr/include/util/delay.h ****   !defined(__DELAY_BACKWARD_COMPATIBLE__) &&	   \
+ 100:/usr/lib/avr/include/util/delay.h ****   __STDC_HOSTED__
+ 101:/usr/lib/avr/include/util/delay.h **** #  include <math.h>
+ 102:/usr/lib/avr/include/util/delay.h **** #endif
+ 103:/usr/lib/avr/include/util/delay.h **** 
+ 104:/usr/lib/avr/include/util/delay.h **** /**
+ 105:/usr/lib/avr/include/util/delay.h ****    \ingroup util_delay
+ 106:/usr/lib/avr/include/util/delay.h **** 
+ 107:/usr/lib/avr/include/util/delay.h ****    Perform a delay of \c __ms milliseconds, using _delay_loop_2().
+ 108:/usr/lib/avr/include/util/delay.h **** 
+ 109:/usr/lib/avr/include/util/delay.h ****    The macro F_CPU is supposed to be defined to a
+ 110:/usr/lib/avr/include/util/delay.h ****    constant defining the CPU clock frequency (in Hertz).
+ 111:/usr/lib/avr/include/util/delay.h **** 
+ 112:/usr/lib/avr/include/util/delay.h ****    The maximal possible delay is 262.14 ms / F_CPU in MHz.
+ 113:/usr/lib/avr/include/util/delay.h **** 
+ 114:/usr/lib/avr/include/util/delay.h ****    When the user request delay which exceed the maximum possible one,
+ 115:/usr/lib/avr/include/util/delay.h ****    _delay_ms() provides a decreased resolution functionality. In this
+ 116:/usr/lib/avr/include/util/delay.h ****    mode _delay_ms() will work with a resolution of 1/10 ms, providing
+ 117:/usr/lib/avr/include/util/delay.h ****    delays up to 6.5535 seconds (independent from CPU frequency).  The
+ 118:/usr/lib/avr/include/util/delay.h ****    user will not be informed about decreased resolution.
+ 119:/usr/lib/avr/include/util/delay.h **** 
+ 120:/usr/lib/avr/include/util/delay.h ****    If the avr-gcc toolchain has __builtin_avr_delay_cycles(unsigned long)
+ 121:/usr/lib/avr/include/util/delay.h ****    support, maximal possible delay is 4294967.295 ms/ F_CPU in MHz. For
+ 122:/usr/lib/avr/include/util/delay.h ****    values greater than the maximal possible delay, overflows results in
+ 123:/usr/lib/avr/include/util/delay.h ****    no delay i.e., 0ms.
+ 124:/usr/lib/avr/include/util/delay.h **** 
+ 125:/usr/lib/avr/include/util/delay.h ****    Conversion of __us into clock cycles may not always result in integer.
+ 126:/usr/lib/avr/include/util/delay.h ****    By default, the clock cycles rounded up to next integer. This ensures that
+ 127:/usr/lib/avr/include/util/delay.h ****    the user gets atleast __us microseconds of delay.
+ 128:/usr/lib/avr/include/util/delay.h **** 
+ 129:/usr/lib/avr/include/util/delay.h ****    Alternatively, user can define __DELAY_ROUND_DOWN__ and __DELAY_ROUND_CLOSEST__
+ 130:/usr/lib/avr/include/util/delay.h ****    to round down and round to closest integer.
+ 131:/usr/lib/avr/include/util/delay.h **** 
+ 132:/usr/lib/avr/include/util/delay.h ****    Note: The new implementation of _delay_ms(double __ms) with 
+ 133:/usr/lib/avr/include/util/delay.h ****     __builtin_avr_delay_cycles(unsigned long) support is not backward compatible. 
+ 134:/usr/lib/avr/include/util/delay.h ****    User can define __DELAY_BACKWARD_COMPATIBLE__ to get a backward compatible delay.
+ 135:/usr/lib/avr/include/util/delay.h ****    Also, the backward compatible
+ 136:/usr/lib/avr/include/util/delay.h ****    algorithm will be chosen if the code is compiled in a <em>freestanding
+ 137:/usr/lib/avr/include/util/delay.h ****    environment</em> (GCC option \c -ffreestanding), as the math functions
+ 138:/usr/lib/avr/include/util/delay.h ****    required for rounding are not available to the compiler then.
+ 139:/usr/lib/avr/include/util/delay.h **** 
+ 140:/usr/lib/avr/include/util/delay.h ****  */
+ 141:/usr/lib/avr/include/util/delay.h **** void
+ 142:/usr/lib/avr/include/util/delay.h **** _delay_ms(double __ms)
+ 143:/usr/lib/avr/include/util/delay.h **** {
+ 144:/usr/lib/avr/include/util/delay.h **** 	double __tmp ; 
+ 145:/usr/lib/avr/include/util/delay.h **** #if __HAS_DELAY_CYCLES && defined(__OPTIMIZE__) && \
+ 146:/usr/lib/avr/include/util/delay.h ****   !defined(__DELAY_BACKWARD_COMPATIBLE__) &&	   \
+ 147:/usr/lib/avr/include/util/delay.h ****   __STDC_HOSTED__
+ 148:/usr/lib/avr/include/util/delay.h **** 	uint32_t __ticks_dc;
+ 149:/usr/lib/avr/include/util/delay.h **** 	extern void __builtin_avr_delay_cycles(unsigned long);
+ 150:/usr/lib/avr/include/util/delay.h **** 	__tmp = ((F_CPU) / 1e3) * __ms;
+ 151:/usr/lib/avr/include/util/delay.h **** 
+ 152:/usr/lib/avr/include/util/delay.h **** 	#if defined(__DELAY_ROUND_DOWN__)
+ 153:/usr/lib/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)fabs(__tmp);
+ 154:/usr/lib/avr/include/util/delay.h **** 
+ 155:/usr/lib/avr/include/util/delay.h **** 	#elif defined(__DELAY_ROUND_CLOSEST__)
+ 156:/usr/lib/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)(fabs(__tmp)+0.5);
+ 157:/usr/lib/avr/include/util/delay.h **** 
+ 158:/usr/lib/avr/include/util/delay.h **** 	#else
+ 159:/usr/lib/avr/include/util/delay.h **** 		//round up by default
+ 160:/usr/lib/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)(ceil(fabs(__tmp)));
+ 161:/usr/lib/avr/include/util/delay.h **** 	#endif
+ 162:/usr/lib/avr/include/util/delay.h **** 
+ 163:/usr/lib/avr/include/util/delay.h **** 	__builtin_avr_delay_cycles(__ticks_dc);
+ 164:/usr/lib/avr/include/util/delay.h **** 
+ 165:/usr/lib/avr/include/util/delay.h **** #else
+ 166:/usr/lib/avr/include/util/delay.h **** 	uint16_t __ticks;
+ 167:/usr/lib/avr/include/util/delay.h **** 	__tmp = ((F_CPU) / 4e3) * __ms;
+ 168:/usr/lib/avr/include/util/delay.h **** 	if (__tmp < 1.0)
+ 169:/usr/lib/avr/include/util/delay.h **** 		__ticks = 1;
+ 170:/usr/lib/avr/include/util/delay.h **** 	else if (__tmp > 65535)
+ 171:/usr/lib/avr/include/util/delay.h **** 	{
+ 172:/usr/lib/avr/include/util/delay.h **** 		//	__ticks = requested delay in 1/10 ms
+ 173:/usr/lib/avr/include/util/delay.h **** 		__ticks = (uint16_t) (__ms * 10.0);
+ 174:/usr/lib/avr/include/util/delay.h **** 		while(__ticks)
+ 175:/usr/lib/avr/include/util/delay.h **** 		{
+ 176:/usr/lib/avr/include/util/delay.h **** 			// wait 1/10 ms
+ 177:/usr/lib/avr/include/util/delay.h **** 			_delay_loop_2(((F_CPU) / 4e3) / 10);
+ 178:/usr/lib/avr/include/util/delay.h **** 			__ticks --;
+ 179:/usr/lib/avr/include/util/delay.h **** 		}
+ 180:/usr/lib/avr/include/util/delay.h **** 		return;
+ 181:/usr/lib/avr/include/util/delay.h **** 	}
+ 182:/usr/lib/avr/include/util/delay.h **** 	else
+ 183:/usr/lib/avr/include/util/delay.h **** 		__ticks = (uint16_t)__tmp;
+ 184:/usr/lib/avr/include/util/delay.h **** 	_delay_loop_2(__ticks);
+ 185:/usr/lib/avr/include/util/delay.h **** #endif
+ 186:/usr/lib/avr/include/util/delay.h **** }
+ 187:/usr/lib/avr/include/util/delay.h **** 
+ 188:/usr/lib/avr/include/util/delay.h **** /**
+ 189:/usr/lib/avr/include/util/delay.h ****    \ingroup util_delay
+ 190:/usr/lib/avr/include/util/delay.h **** 
+ 191:/usr/lib/avr/include/util/delay.h ****    Perform a delay of \c __us microseconds, using _delay_loop_1().
+ 192:/usr/lib/avr/include/util/delay.h **** 
+ 193:/usr/lib/avr/include/util/delay.h ****    The macro F_CPU is supposed to be defined to a
+ 194:/usr/lib/avr/include/util/delay.h ****    constant defining the CPU clock frequency (in Hertz).
+ 195:/usr/lib/avr/include/util/delay.h **** 
+ 196:/usr/lib/avr/include/util/delay.h ****    The maximal possible delay is 768 us / F_CPU in MHz.
+ 197:/usr/lib/avr/include/util/delay.h **** 
+ 198:/usr/lib/avr/include/util/delay.h ****    If the user requests a delay greater than the maximal possible one,
+ 199:/usr/lib/avr/include/util/delay.h ****    _delay_us() will automatically call _delay_ms() instead.  The user
+ 200:/usr/lib/avr/include/util/delay.h ****    will not be informed about this case.
+ 201:/usr/lib/avr/include/util/delay.h **** 
+ 202:/usr/lib/avr/include/util/delay.h ****    If the avr-gcc toolchain has __builtin_avr_delay_cycles(unsigned long)
+ 203:/usr/lib/avr/include/util/delay.h ****    support, maximal possible delay is 4294967.295 us/ F_CPU in MHz. For
+ 204:/usr/lib/avr/include/util/delay.h ****    values greater than the maximal possible delay, overflow results in
+ 205:/usr/lib/avr/include/util/delay.h ****    no delay i.e., 0us.
+ 206:/usr/lib/avr/include/util/delay.h ****   
+ 207:/usr/lib/avr/include/util/delay.h ****    Conversion of __us into clock cycles may not always result in integer.
+ 208:/usr/lib/avr/include/util/delay.h ****    By default, the clock cycles rounded up to next integer. This ensures that
+ 209:/usr/lib/avr/include/util/delay.h ****    the user gets atleast __us microseconds of delay.
+ 210:/usr/lib/avr/include/util/delay.h **** 
+ 211:/usr/lib/avr/include/util/delay.h ****    Alternatively, user can define __DELAY_ROUND_DOWN__ and __DELAY_ROUND_CLOSEST__
+ 212:/usr/lib/avr/include/util/delay.h ****    to round down and round to closest integer.
+ 213:/usr/lib/avr/include/util/delay.h ****  
+ 214:/usr/lib/avr/include/util/delay.h ****    Note: The new implementation of _delay_us(double __us) with 
+ 215:/usr/lib/avr/include/util/delay.h ****     __builtin_avr_delay_cycles(unsigned long) support is not backward compatible.
+ 216:/usr/lib/avr/include/util/delay.h ****    User can define __DELAY_BACKWARD_COMPATIBLE__ to get a backward compatible delay.
+ 217:/usr/lib/avr/include/util/delay.h ****    Also, the backward compatible
+ 218:/usr/lib/avr/include/util/delay.h ****    algorithm will be chosen if the code is compiled in a <em>freestanding
+ 219:/usr/lib/avr/include/util/delay.h ****    environment</em> (GCC option \c -ffreestanding), as the math functions
+ 220:/usr/lib/avr/include/util/delay.h ****    required for rounding are not available to the compiler then.
+ 221:/usr/lib/avr/include/util/delay.h **** 
+ 222:/usr/lib/avr/include/util/delay.h ****  */
+ 223:/usr/lib/avr/include/util/delay.h **** void
+ 224:/usr/lib/avr/include/util/delay.h **** _delay_us(double __us)
+ 225:/usr/lib/avr/include/util/delay.h **** {
+ 226:/usr/lib/avr/include/util/delay.h **** 	double __tmp ; 
+ 227:/usr/lib/avr/include/util/delay.h **** #if __HAS_DELAY_CYCLES && defined(__OPTIMIZE__) && \
+ 228:/usr/lib/avr/include/util/delay.h ****   !defined(__DELAY_BACKWARD_COMPATIBLE__) &&	   \
+ 229:/usr/lib/avr/include/util/delay.h ****   __STDC_HOSTED__
+ 230:/usr/lib/avr/include/util/delay.h **** 	uint32_t __ticks_dc;
+ 231:/usr/lib/avr/include/util/delay.h **** 	extern void __builtin_avr_delay_cycles(unsigned long);
+ 232:/usr/lib/avr/include/util/delay.h **** 	__tmp = ((F_CPU) / 1e6) * __us;
+ 233:/usr/lib/avr/include/util/delay.h **** 
+ 234:/usr/lib/avr/include/util/delay.h **** 	#if defined(__DELAY_ROUND_DOWN__)
+ 235:/usr/lib/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)fabs(__tmp);
+ 236:/usr/lib/avr/include/util/delay.h **** 
+ 237:/usr/lib/avr/include/util/delay.h **** 	#elif defined(__DELAY_ROUND_CLOSEST__)
+ 238:/usr/lib/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)(fabs(__tmp)+0.5);
+ 239:/usr/lib/avr/include/util/delay.h **** 
+ 240:/usr/lib/avr/include/util/delay.h **** 	#else
+ 241:/usr/lib/avr/include/util/delay.h **** 		//round up by default
+ 242:/usr/lib/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)(ceil(fabs(__tmp)));
+ 243:/usr/lib/avr/include/util/delay.h **** 	#endif
+ 244:/usr/lib/avr/include/util/delay.h **** 
+ 245:/usr/lib/avr/include/util/delay.h **** 	__builtin_avr_delay_cycles(__ticks_dc);
+ 880               	.LM60:
+ 881 0482 4AEF      		ldi r20,lo8(-6)
+ 882 0484 4A95      	1:	dec r20
+ 883 0486 01F4      		brne 1b
+ 884 0488 00C0      		rjmp .
+ 885               	.LBE29:
+ 886               	.LBE28:
+ 888               	.Ltext2:
+ 890               	.LM61:
+ 891 048a 2F5F      		subi r18,-1
+ 892 048c 3F4F      		sbci r19,-1
+ 893 048e 2817      		cp r18,r24
+ 894 0490 3907      		cpc r19,r25
+ 895 0492 01F4      		brne .L41
+ 896               	.L40:
+ 897 0494 0895      		ret
+ 898               	.LBE27:
+ 903               	.Lscope12:
+ 906               	.global	disableMotorPWM
+ 908               	disableMotorPWM:
+ 256:motorctrl.c   ****         _delay_us(47);
+ 257:motorctrl.c   ****     }
+ 258:motorctrl.c   **** }
+ 259:motorctrl.c   **** 
+ 260:motorctrl.c   **** void motorControl(motor *m, uint8_t dir, uint8_t pwm){
+ 261:motorctrl.c   ****     // We can directly control motor if direction is correct or motor is stopped
+ 262:motorctrl.c   ****     if (m->current_dir == dir || m->current_pwm == 0){
+ 263:motorctrl.c   ****         if (m->current_pwm < pwm){ //Need to accelerate
+ 264:motorctrl.c   ****             while(m->current_pwm != pwm){ //Loop until set is equal
+ 265:motorctrl.c   ****                 if ((m->current_pwm + m->acceleration_step) > m->max_pwm){
+ 266:motorctrl.c   ****                     m->current_pwm = m->max_pwm;
+ 267:motorctrl.c   ****                     pwm = m->max_pwm;
+ 268:motorctrl.c   ****                 }
+ 269:motorctrl.c   ****                 else{
+ 270:motorctrl.c   ****                     m->current_pwm += m->acceleration_step;
+ 271:motorctrl.c   ****                 }
+ 272:motorctrl.c   ****                 setMotor(m, dir, m->current_pwm);
+ 273:motorctrl.c   ****                 delayLoop_us(m->acceleration_time);
+ 274:motorctrl.c   ****             }
+ 275:motorctrl.c   ****         }
+ 276:motorctrl.c   ****         else{
+ 277:motorctrl.c   ****             while(m->current_pwm != pwm){ //Loop until set is equal
+ 278:motorctrl.c   ****                 if (m->current_pwm - m->deacceleration_step <= 0){
+ 279:motorctrl.c   ****                     m->current_pwm = 0;
+ 280:motorctrl.c   ****                 }
+ 281:motorctrl.c   ****                 else{
+ 282:motorctrl.c   ****                     m->current_pwm += m->deacceleration_step;
+ 283:motorctrl.c   ****                 }
+ 284:motorctrl.c   ****                 setMotor(m, dir, m->current_pwm);
+ 285:motorctrl.c   ****                 delayLoop_us(m->deacceleration_time);
+ 286:motorctrl.c   ****             }
+ 287:motorctrl.c   ****         }
+ 288:motorctrl.c   ****     }
+ 289:motorctrl.c   ****     else{ //Motor is going so it need to stop before direction change
+ 290:motorctrl.c   ****         setMotor(m, m->current_dir, 0);
+ 291:motorctrl.c   ****         motorControl(m, dir, pwm); // Call recursively this function again when motor is stopped.
+ 292:motorctrl.c   ****     }
+ 293:motorctrl.c   **** }
+ 294:motorctrl.c   **** 
+ 295:motorctrl.c   **** 
+ 296:motorctrl.c   **** void initMotor(void){
+ 297:motorctrl.c   ****     motor m1 =
+ 298:motorctrl.c   ****     {
+ 299:motorctrl.c   ****          &PORTD, &DDRD, 6, &TCCR0A, (OC0B + FAST_PWM), &TCCR0B, 0x00, &OCR0A, //MOTOR A FORWARD
+ 300:motorctrl.c   ****          &PORTD, &DDRD, 5, &TCCR0A, (OC0A + FAST_PWM), &TCCR0B, 0x00, &OCR0B, //MOTOR A REVERSE
+ 301:motorctrl.c   ****          &PORTD, &DDRD, 7, //MOTOR Enable control
+ 302:motorctrl.c   ****          ANGLE_ACTUATOR_ADC,
+ 303:motorctrl.c   ****          ANGLE_ACTUATOR_CURRENT_ADC,
+ 304:motorctrl.c   ****          &PORTC, &DDRC, 2,
+ 305:motorctrl.c   ****          &PORTC, &DDRC, 3,
+ 306:motorctrl.c   ****          0.0,       //Current position
+ 307:motorctrl.c   ****          FORWARD,   //current dir
+ 308:motorctrl.c   ****          0.0,       //current position
+ 309:motorctrl.c   ****          MIN_ANGLE + (ANGLE_RANGE / 2), //Set position, half way
+ 310:motorctrl.c   ****          MOTOR_ACC_STEP,     //Acceleration step
+ 311:motorctrl.c   ****          MOTOR_ACC_STEP,     //Deacceleration step
+ 312:motorctrl.c   ****          MOTOR_ACCELERATION, //Acceleration time
+ 313:motorctrl.c   ****          MOTOR_ACCELERATION, //deacceleration time
+ 314:motorctrl.c   ****          MOTOR_HYSTERESIS,   //Anglular hysteresis in degrees
+ 315:motorctrl.c   ****          ANGLE_MAX_PWM,      //MAX pwm value for anglular movements
+ 316:motorctrl.c   ****          MIN_ANGLE,          //Minimun allowed angle
+ 317:motorctrl.c   ****          ANGLE_RANGE,        //0-100 mapping to angle values
+ 318:motorctrl.c   ****          ANGLE_REFERENCE,    //Reference which against angle corrections are applied   
+ 319:motorctrl.c   ****          ANGLE_ACTUATOR_MIN_LENGTH,
+ 320:motorctrl.c   ****          ANGLE_ACTUATOR_MAX_LENGTH,
+ 321:motorctrl.c   ****          ANGLE_ACTUATOR_MIN_LIMIT,
+ 322:motorctrl.c   ****          ANGLE_ACTUATOR_MAX_LIMIT,
+ 323:motorctrl.c   ****          ANGLE_MOTOR_TIMEOUT,//timeout in milliseconds
+ 324:motorctrl.c   ****          0,                  //timeout current value starts at zero
+ 325:motorctrl.c   ****          STATUS_OK,
+ 326:motorctrl.c   ****          &angleConversion //angle correction function pointer
+ 327:motorctrl.c   ****     };
+ 328:motorctrl.c   ****     motor m2 =
+ 329:motorctrl.c   ****     {
+ 330:motorctrl.c   ****          &PORTB, &DDRB, 3, &TCCR2A, (OC2A + FAST_PWM), &TCCR2B, PRESCALER, &OCR2A, //MOTOR B FORWAR
+ 331:motorctrl.c   ****          &PORTD, &DDRD, 3, &TCCR2A, (OC2B + FAST_PWM), &TCCR2B, PRESCALER, &OCR2B,//MOTOR B REVERSE
+ 332:motorctrl.c   ****          &PORTB, &DDRB, 4, //MOTOR Enable control
+ 333:motorctrl.c   ****          TILT_ACTUATOR_ADC,
+ 334:motorctrl.c   ****          TILT_ACTUATOR_CURRENT_ADC,
+ 335:motorctrl.c   ****          &PORTC, &DDRC, 4,
+ 336:motorctrl.c   ****          &PORTC, &DDRC, 5,
+ 337:motorctrl.c   ****          0.0,         //Current position
+ 338:motorctrl.c   ****          FORWARD,   //current dir
+ 339:motorctrl.c   ****          0.0, //current position
+ 340:motorctrl.c   ****          MIN_TILT + (TILT_RANGE / 2), //Set position, half way
+ 341:motorctrl.c   ****          MOTOR_ACC_STEP,     //Acceleration step
+ 342:motorctrl.c   ****          MOTOR_ACC_STEP,     //Deacceleration step
+ 343:motorctrl.c   ****          MOTOR_ACCELERATION, //Acceleration time
+ 344:motorctrl.c   ****          MOTOR_ACCELERATION, //deacceleration time
+ 345:motorctrl.c   ****          MOTOR_HYSTERESIS,   //Anglular hysteresis in degrees
+ 346:motorctrl.c   ****          TILT_MAX_PWM,      //MAX pwm value for anglular movements
+ 347:motorctrl.c   ****          MIN_TILT,          //Minimun allowed angle
+ 348:motorctrl.c   ****          TILT_RANGE,        //0-100 mapping to angle values
+ 349:motorctrl.c   ****          TILT_REFERENCE,
+ 350:motorctrl.c   ****          TILT_ACTUATOR_MIN_LENGTH,
+ 351:motorctrl.c   ****          TILT_ACTUATOR_MAX_LENGTH,
+ 352:motorctrl.c   ****          TILT_ACTUATOR_MIN_LIMIT,
+ 353:motorctrl.c   ****          TILT_ACTUATOR_MAX_LIMIT,
+ 354:motorctrl.c   ****          TILT_MOTOR_TIMEOUT,//timeout in milliseconds
+ 355:motorctrl.c   ****          0,                  //timeout current value starts at zero
+ 356:motorctrl.c   ****          STATUS_OK,
+ 357:motorctrl.c   ****          &tiltConversion //angle correction function pointer
+ 358:motorctrl.c   ****     };
+ 359:motorctrl.c   ****     motors[ANGLE_MOTOR] = m1;
+ 360:motorctrl.c   ****     motors[TILT_MOTOR] = m2;
+ 361:motorctrl.c   **** 
+ 362:motorctrl.c   **** 
+ 363:motorctrl.c   ****     for(uint8_t i = 0; i<NUM_OF_MOTORS; i++){
+ 364:motorctrl.c   ****         motor m = motors[i];
+ 365:motorctrl.c   ****         //Set direction and enable to output pins
+ 366:motorctrl.c   ****         *m.fwd_dir_addr |= 1<<m.fwd_pin;
+ 367:motorctrl.c   ****         *m.rev_dir_addr |= 1<<m.rev_pin;
+ 368:motorctrl.c   ****         *m.enable_dir_addr |= 1<<m.enable_pin;
+ 369:motorctrl.c   ****         
+ 370:motorctrl.c   ****         //Set pullups correctly
+ 371:motorctrl.c   ****         *m.fwd_port_addr &= ~(1<<m.fwd_pin);
+ 372:motorctrl.c   ****         *m.rev_port_addr &= ~(1<<m.rev_pin);
+ 373:motorctrl.c   ****         *m.enable_port_addr &= ~(1<<m.enable_pin);
+ 374:motorctrl.c   ****         
+ 375:motorctrl.c   ****         //Init forward PWM settings
+ 376:motorctrl.c   ****         *m.fwd_TCCRA_addr = 0x00;//m.fwd_TCCRA_value;
+ 377:motorctrl.c   ****         *m.fwd_TCCRB_addr = 0x00;//m.fwd_TCCRB_value;
+ 378:motorctrl.c   ****         *m.fwd_OCR_addr = 0x00; //Init PWM to zero
+ 379:motorctrl.c   ****         
+ 380:motorctrl.c   ****         //Init reverse PWM settings
+ 381:motorctrl.c   ****         *m.rev_TCCRA_addr = 0x00;//m.rev_TCCRA_value;
+ 382:motorctrl.c   ****         *m.rev_TCCRB_addr = 0x00; //m.rev_TCCRB_value;
+ 383:motorctrl.c   ****         *m.rev_OCR_addr = 0x00; //Init PWM to zero
+ 384:motorctrl.c   ****         
+ 385:motorctrl.c   ****         //init Actuator +5 and GND pins
+ 386:motorctrl.c   ****         *m.actuator_1_port_addr |= 1<<m.actuator_1_pin;
+ 387:motorctrl.c   ****         *m.actuator_1_dir_addr |= 1<<m.actuator_1_pin;
+ 388:motorctrl.c   ****         *m.actuator_1_port_addr &= ~(1<<m.actuator_2_pin);
+ 389:motorctrl.c   ****         *m.actuator_1_dir_addr &= ~(1<<m.actuator_2_pin);
+ 390:motorctrl.c   ****         _delay_ms(10); //wait 10ms so ADC pins settle.
+ 391:motorctrl.c   **** 
+ 392:motorctrl.c   ****         m.current_position = getMotorPosition(&m);  
+ 393:motorctrl.c   ****     }
+ 394:motorctrl.c   ****        //Update motor positions
+ 395:motorctrl.c   ****     //motors[ANGLE_MOTOR].current_position = getAngle();
+ 396:motorctrl.c   ****     //motors[TILT_MOTOR].current_position  = getTilt();    
+ 397:motorctrl.c   ****     
+ 398:motorctrl.c   ****    // GTCCR = 0x00;       //Start Counter
+ 399:motorctrl.c   **** }
+ 400:motorctrl.c   **** 
+ 401:motorctrl.c   **** void disableMotorPWM(motor *m){
+ 910               	.LM62:
+ 911               	.LFBB13:
+ 912               	/* prologue: function */
+ 913               	/* frame size = 0 */
+ 914               	/* stack size = 0 */
+ 915               	.L__stack_usage = 0
+ 916 0496 FC01      		movw r30,r24
+ 402:motorctrl.c   **** 
+ 403:motorctrl.c   ****     *m->enable_port_addr &= ~(1<<m->enable_pin); //Disable motor => clear enable port
+ 918               	.LM63:
+ 919 0498 A28D      		ldd r26,Z+26
+ 920 049a B38D      		ldd r27,Z+27
+ 921 049c 2C91      		ld r18,X
+ 922 049e 81E0      		ldi r24,lo8(1)
+ 923 04a0 90E0      		ldi r25,0
+ 924 04a2 068C      		ldd r0,Z+30
+ 925 04a4 00C0      		rjmp 2f
+ 926               		1:
+ 927 04a6 880F      		lsl r24
+ 928 04a8 991F      		rol r25
+ 929               		2:
+ 930 04aa 0A94      		dec r0
+ 931 04ac 02F4      		brpl 1b
+ 932 04ae 8095      		com r24
+ 933 04b0 8223      		and r24,r18
+ 934 04b2 8C93      		st X,r24
+ 404:motorctrl.c   ****     *m->fwd_TCCRA_addr = 0x00;//m.fwd_TCCRA_value;
+ 936               	.LM64:
+ 937 04b4 A581      		ldd r26,Z+5
+ 938 04b6 B681      		ldd r27,Z+6
+ 939 04b8 1C92      		st X,__zero_reg__
+ 405:motorctrl.c   ****     *m->fwd_TCCRB_addr = 0x00;//m.fwd_TCCRB_value;
+ 941               	.LM65:
+ 942 04ba A085      		ldd r26,Z+8
+ 943 04bc B185      		ldd r27,Z+9
+ 944 04be 1C92      		st X,__zero_reg__
+ 406:motorctrl.c   ****     *m->fwd_OCR_addr = 0x00; //Init PWM to zero
+ 946               	.LM66:
+ 947 04c0 A385      		ldd r26,Z+11
+ 948 04c2 B485      		ldd r27,Z+12
+ 949 04c4 1C92      		st X,__zero_reg__
+ 407:motorctrl.c   ****     
+ 408:motorctrl.c   ****     //Init reverse PWM settings
+ 409:motorctrl.c   ****     *m->rev_TCCRA_addr = 0x00;//m.rev_TCCRA_value;
+ 951               	.LM67:
+ 952 04c6 A289      		ldd r26,Z+18
+ 953 04c8 B389      		ldd r27,Z+19
+ 954 04ca 1C92      		st X,__zero_reg__
+ 410:motorctrl.c   ****     *m->rev_TCCRB_addr = 0x00; //m.rev_TCCRB_value;
+ 956               	.LM68:
+ 957 04cc A589      		ldd r26,Z+21
+ 958 04ce B689      		ldd r27,Z+22
+ 959 04d0 1C92      		st X,__zero_reg__
+ 411:motorctrl.c   ****     *m->rev_OCR_addr = 0x00; //Init PWM to zero
+ 961               	.LM69:
+ 962 04d2 008C      		ldd __tmp_reg__,Z+24
+ 963 04d4 F18D      		ldd r31,Z+25
+ 964 04d6 E02D      		mov r30,__tmp_reg__
+ 965 04d8 1082      		st Z,__zero_reg__
+ 966 04da 0895      		ret
+ 968               	.Lscope13:
+ 973               	.global	setMotor
+ 975               	setMotor:
+ 412:motorctrl.c   **** 
+ 413:motorctrl.c   **** } 
+ 414:motorctrl.c   **** //volatile uint8_t *OCRC_ADDR[] = {&OCR1CL, &OCR4AL }
+ 415:motorctrl.c   **** //volatile uint8_t *OCRB_ADDR[] = {&OCR1BL, &OCR4BL }
+ 416:motorctrl.c   **** 
+ 417:motorctrl.c   **** void setMotor(motor *m, uint8_t dir, uint8_t pwm){
+ 977               	.LM70:
+ 978               	.LFBB14:
+ 979               	/* prologue: function */
+ 980               	/* frame size = 0 */
+ 981               	/* stack size = 0 */
+ 982               	.L__stack_usage = 0
+ 983 04dc FC01      		movw r30,r24
+ 418:motorctrl.c   ****     m->current_pwm = pwm;
+ 985               	.LM71:
+ 986 04de 43A7      		std Z+43,r20
+ 419:motorctrl.c   ****     if (pwm > 0){
+ 988               	.LM72:
+ 989 04e0 4423      		tst r20
+ 990 04e2 01F0      		breq .L47
+ 420:motorctrl.c   ****         if (dir == FORWARD){ //Forward
+ 992               	.LM73:
+ 993 04e4 6130      		cpi r22,lo8(1)
+ 994 04e6 01F0      		breq .L51
+ 421:motorctrl.c   ****             *m->rev_OCR_addr = 0x00; //PWM pulse width
+ 422:motorctrl.c   ****             *m->fwd_OCR_addr = pwm; 
+ 423:motorctrl.c   ****             *m->rev_port_addr &= ~(1<<m->rev_pin);
+ 424:motorctrl.c   ****             *m->rev_TCCRA_addr = 0x00; //Disable reverse
+ 425:motorctrl.c   ****             *m->fwd_TCCRA_addr = m->fwd_TCCRA_value; //Activate PWM forward
+ 426:motorctrl.c   ****             
+ 427:motorctrl.c   ****             *m->rev_TCCRB_addr = 0x00; //Disable clock Rev
+ 428:motorctrl.c   ****             *m->fwd_TCCRB_addr = m->fwd_TCCRB_value;
+ 429:motorctrl.c   ****         }
+ 430:motorctrl.c   ****         else{ //Backward
+ 431:motorctrl.c   ****             *m->fwd_OCR_addr = 0x00;
+ 996               	.LM74:
+ 997 04e8 A385      		ldd r26,Z+11
+ 998 04ea B485      		ldd r27,Z+12
+ 999 04ec 1C92      		st X,__zero_reg__
+ 432:motorctrl.c   ****             *m->rev_OCR_addr = pwm; 
+ 1001               	.LM75:
+ 1002 04ee A08D      		ldd r26,Z+24
+ 1003 04f0 B18D      		ldd r27,Z+25
+ 1004 04f2 4C93      		st X,r20
+ 433:motorctrl.c   ****             *m->fwd_port_addr &= ~(1<<m->fwd_pin);
+ 1006               	.LM76:
+ 1007 04f4 A081      		ld r26,Z
+ 1008 04f6 B181      		ldd r27,Z+1
+ 1009 04f8 2C91      		ld r18,X
+ 1010 04fa 81E0      		ldi r24,lo8(1)
+ 1011 04fc 90E0      		ldi r25,0
+ 1012 04fe 0480      		ldd r0,Z+4
+ 1013 0500 00C0      		rjmp 2f
+ 1014               		1:
+ 1015 0502 880F      		lsl r24
+ 1016 0504 991F      		rol r25
+ 1017               		2:
+ 1018 0506 0A94      		dec r0
+ 1019 0508 02F4      		brpl 1b
+ 1020 050a 8095      		com r24
+ 1021 050c 8223      		and r24,r18
+ 1022 050e 8C93      		st X,r24
+ 434:motorctrl.c   ****             *m->fwd_TCCRA_addr = 0x00; //Disable FWD
+ 1024               	.LM77:
+ 1025 0510 A581      		ldd r26,Z+5
+ 1026 0512 B681      		ldd r27,Z+6
+ 1027 0514 1C92      		st X,__zero_reg__
+ 435:motorctrl.c   ****             *m->rev_TCCRA_addr = m->rev_TCCRA_value;
+ 1029               	.LM78:
+ 1030 0516 A289      		ldd r26,Z+18
+ 1031 0518 B389      		ldd r27,Z+19
+ 1032 051a 8489      		ldd r24,Z+20
+ 1033 051c 8C93      		st X,r24
+ 436:motorctrl.c   **** 
+ 437:motorctrl.c   ****             *m->fwd_TCCRB_addr = 0x00;
+ 1035               	.LM79:
+ 1036 051e A085      		ldd r26,Z+8
+ 1037 0520 B185      		ldd r27,Z+9
+ 1038 0522 1C92      		st X,__zero_reg__
+ 438:motorctrl.c   ****             *m->rev_TCCRB_addr = m->rev_TCCRB_value;
+ 1040               	.LM80:
+ 1041 0524 A589      		ldd r26,Z+21
+ 1042 0526 B689      		ldd r27,Z+22
+ 1043 0528 8789      		ldd r24,Z+23
+ 1044 052a 8C93      		st X,r24
+ 1045               	.L49:
+ 439:motorctrl.c   ****         }
+ 440:motorctrl.c   ****         
+ 441:motorctrl.c   ****         *m->enable_port_addr |= 1<<m->enable_pin; 
+ 1047               	.LM81:
+ 1048 052c A28D      		ldd r26,Z+26
+ 1049 052e B38D      		ldd r27,Z+27
+ 1050 0530 2C91      		ld r18,X
+ 1051 0532 81E0      		ldi r24,lo8(1)
+ 1052 0534 90E0      		ldi r25,0
+ 1053 0536 068C      		ldd r0,Z+30
+ 1054 0538 00C0      		rjmp 2f
+ 1055               		1:
+ 1056 053a 880F      		lsl r24
+ 1057 053c 991F      		rol r25
+ 1058               		2:
+ 1059 053e 0A94      		dec r0
+ 1060 0540 02F4      		brpl 1b
+ 1061 0542 822B      		or r24,r18
+ 1062 0544 8C93      		st X,r24
+ 1063 0546 0895      		ret
+ 1064               	.L47:
+ 442:motorctrl.c   ****     }
+ 443:motorctrl.c   ****     else{
+ 444:motorctrl.c   ****         disableMotorPWM(m);
+ 1066               	.LM82:
+ 1067 0548 0E94 0000 		call disableMotorPWM
+ 1068 054c 0895      		ret
+ 1069               	.L51:
+ 421:motorctrl.c   ****             *m->fwd_OCR_addr = pwm; 
+ 1071               	.LM83:
+ 1072 054e A08D      		ldd r26,Z+24
+ 1073 0550 B18D      		ldd r27,Z+25
+ 1074 0552 1C92      		st X,__zero_reg__
+ 422:motorctrl.c   ****             *m->rev_port_addr &= ~(1<<m->rev_pin);
+ 1076               	.LM84:
+ 1077 0554 A385      		ldd r26,Z+11
+ 1078 0556 B485      		ldd r27,Z+12
+ 1079 0558 4C93      		st X,r20
+ 423:motorctrl.c   ****             *m->rev_TCCRA_addr = 0x00; //Disable reverse
+ 1081               	.LM85:
+ 1082 055a A585      		ldd r26,Z+13
+ 1083 055c B685      		ldd r27,Z+14
+ 1084 055e 2C91      		ld r18,X
+ 1085 0560 81E0      		ldi r24,lo8(1)
+ 1086 0562 90E0      		ldi r25,0
+ 1087 0564 0188      		ldd r0,Z+17
+ 1088 0566 00C0      		rjmp 2f
+ 1089               		1:
+ 1090 0568 880F      		lsl r24
+ 1091 056a 991F      		rol r25
+ 1092               		2:
+ 1093 056c 0A94      		dec r0
+ 1094 056e 02F4      		brpl 1b
+ 1095 0570 8095      		com r24
+ 1096 0572 8223      		and r24,r18
+ 1097 0574 8C93      		st X,r24
+ 424:motorctrl.c   ****             *m->fwd_TCCRA_addr = m->fwd_TCCRA_value; //Activate PWM forward
+ 1099               	.LM86:
+ 1100 0576 A289      		ldd r26,Z+18
+ 1101 0578 B389      		ldd r27,Z+19
+ 1102 057a 1C92      		st X,__zero_reg__
+ 425:motorctrl.c   ****             
+ 1104               	.LM87:
+ 1105 057c A581      		ldd r26,Z+5
+ 1106 057e B681      		ldd r27,Z+6
+ 1107 0580 8781      		ldd r24,Z+7
+ 1108 0582 8C93      		st X,r24
+ 427:motorctrl.c   ****             *m->fwd_TCCRB_addr = m->fwd_TCCRB_value;
+ 1110               	.LM88:
+ 1111 0584 A589      		ldd r26,Z+21
+ 1112 0586 B689      		ldd r27,Z+22
+ 1113 0588 1C92      		st X,__zero_reg__
+ 428:motorctrl.c   ****         }
+ 1115               	.LM89:
+ 1116 058a A085      		ldd r26,Z+8
+ 1117 058c B185      		ldd r27,Z+9
+ 1118 058e 8285      		ldd r24,Z+10
+ 1119 0590 8C93      		st X,r24
+ 1120 0592 00C0      		rjmp .L49
+ 1122               	.Lscope14:
+ 1127               	.global	motorControl
+ 1129               	motorControl:
+ 260:motorctrl.c   ****     // We can directly control motor if direction is correct or motor is stopped
+ 1131               	.LM90:
+ 1132               	.LFBB15:
+ 1133 0594 0F93      		push r16
+ 1134 0596 1F93      		push r17
+ 1135 0598 CF93      		push r28
+ 1136 059a DF93      		push r29
+ 1137               	/* prologue: function */
+ 1138               	/* frame size = 0 */
+ 1139               	/* stack size = 4 */
+ 1140               	.L__stack_usage = 4
+ 1141 059c EC01      		movw r28,r24
+ 1142 059e 162F      		mov r17,r22
+ 1143 05a0 042F      		mov r16,r20
+ 262:motorctrl.c   ****         if (m->current_pwm < pwm){ //Need to accelerate
+ 1145               	.LM91:
+ 1146 05a2 8CA5      		ldd r24,Y+44
+ 1147 05a4 8613      		cpse r24,r22
+ 1148 05a6 00C0      		rjmp .L81
+ 1149 05a8 00C0      		rjmp .L56
+ 1150               	.L57:
+ 290:motorctrl.c   ****         motorControl(m, dir, pwm); // Call recursively this function again when motor is stopped.
+ 1152               	.LM92:
+ 1153 05aa 8CA5      		ldd r24,Y+44
+ 1154               	.LBB40:
+ 1155               	.LBB41:
+ 418:motorctrl.c   ****     if (pwm > 0){
+ 1157               	.LM93:
+ 1158 05ac 1BA6      		std Y+43,__zero_reg__
+ 1160               	.LM94:
+ 1161 05ae CE01      		movw r24,r28
+ 1162 05b0 0E94 0000 		call disableMotorPWM
+ 1163               	.LBE41:
+ 1164               	.LBE40:
+ 262:motorctrl.c   ****         if (m->current_pwm < pwm){ //Need to accelerate
+ 1166               	.LM95:
+ 1167 05b4 8CA5      		ldd r24,Y+44
+ 1168 05b6 8117      		cp r24,r17
+ 1169 05b8 01F0      		breq .L56
+ 1170               	.L81:
+ 262:motorctrl.c   ****         if (m->current_pwm < pwm){ //Need to accelerate
+ 1172               	.LM96:
+ 1173 05ba 8BA5      		ldd r24,Y+43
+ 1174 05bc 8111      		cpse r24,__zero_reg__
+ 1175 05be 00C0      		rjmp .L57
+ 1176               	.L56:
+ 263:motorctrl.c   ****             while(m->current_pwm != pwm){ //Loop until set is equal
+ 1178               	.LM97:
+ 1179 05c0 8BA5      		ldd r24,Y+43
+ 1180 05c2 8017      		cp r24,r16
+ 1181 05c4 00F4      		brsh .L80
+ 1182               	.L55:
+ 264:motorctrl.c   ****                 if ((m->current_pwm + m->acceleration_step) > m->max_pwm){
+ 1184               	.LM98:
+ 1185 05c6 8BA5      		ldd r24,Y+43
+ 1186 05c8 8017      		cp r24,r16
+ 1187 05ca 01F0      		breq .L52
+ 1188               	.L62:
+ 265:motorctrl.c   ****                     m->current_pwm = m->max_pwm;
+ 1190               	.LM99:
+ 1191 05cc 4BA5      		ldd r20,Y+43
+ 1192 05ce 2DA9      		ldd r18,Y+53
+ 1193 05d0 3FAD      		ldd r19,Y+63
+ 1194 05d2 822F      		mov r24,r18
+ 1195 05d4 90E0      		ldi r25,0
+ 1196 05d6 840F      		add r24,r20
+ 1197 05d8 911D      		adc r25,__zero_reg__
+ 1198 05da 432F      		mov r20,r19
+ 1199 05dc 50E0      		ldi r21,0
+ 1200 05de 4817      		cp r20,r24
+ 1201 05e0 5907      		cpc r21,r25
+ 1202 05e2 04F0      		brlt .+2
+ 1203 05e4 00C0      		rjmp .L58
+ 266:motorctrl.c   ****                     pwm = m->max_pwm;
+ 1205               	.LM100:
+ 1206 05e6 3BA7      		std Y+43,r19
+ 267:motorctrl.c   ****                 }
+ 1208               	.LM101:
+ 1209 05e8 032F      		mov r16,r19
+ 1210               	.L59:
+ 272:motorctrl.c   ****                 delayLoop_us(m->acceleration_time);
+ 1212               	.LM102:
+ 1213 05ea 4BA5      		ldd r20,Y+43
+ 1214 05ec 612F      		mov r22,r17
+ 1215 05ee CE01      		movw r24,r28
+ 1216 05f0 0E94 0000 		call setMotor
+ 1217               	.LBB42:
+ 1218               	.LBB43:
+ 255:motorctrl.c   ****         _delay_us(47);
+ 1220               	.LM103:
+ 1221 05f4 2FA9      		ldd r18,Y+55
+ 1222 05f6 38AD      		ldd r19,Y+56
+ 1223 05f8 3695      		lsr r19
+ 1224 05fa 2795      		ror r18
+ 1225 05fc ABE7      		ldi r26,lo8(123)
+ 1226 05fe B4E1      		ldi r27,lo8(20)
+ 1227 0600 0E94 0000 		call __umulhisi3
+ 1228 0604 9695      		lsr r25
+ 1229 0606 8795      		ror r24
+ 1230 0608 0097      		sbiw r24,0
+ 1231 060a 01F0      		breq .L55
+ 1232 060c 20E0      		ldi r18,0
+ 1233 060e 30E0      		ldi r19,0
+ 1234               	.L60:
+ 1235               	.LBB44:
+ 1236               	.LBB45:
+ 1238               	.Ltext3:
+ 1240               	.LM104:
+ 1241 0610 4AEF      		ldi r20,lo8(-6)
+ 1242 0612 4A95      	1:	dec r20
+ 1243 0614 01F4      		brne 1b
+ 1244 0616 00C0      		rjmp .
+ 1245               	.LBE45:
+ 1246               	.LBE44:
+ 1248               	.Ltext4:
+ 255:motorctrl.c   ****         _delay_us(47);
+ 1250               	.LM105:
+ 1251 0618 2F5F      		subi r18,-1
+ 1252 061a 3F4F      		sbci r19,-1
+ 1253 061c 2817      		cp r18,r24
+ 1254 061e 3907      		cpc r19,r25
+ 1255 0620 01F4      		brne .L60
+ 1256               	.LBE43:
+ 1257               	.LBE42:
+ 264:motorctrl.c   ****                 if ((m->current_pwm + m->acceleration_step) > m->max_pwm){
+ 1259               	.LM106:
+ 1260 0622 8BA5      		ldd r24,Y+43
+ 1261 0624 8013      		cpse r24,r16
+ 1262 0626 00C0      		rjmp .L62
+ 1263               	.L52:
+ 1264               	/* epilogue start */
+ 293:motorctrl.c   **** 
+ 1266               	.LM107:
+ 1267 0628 DF91      		pop r29
+ 1268 062a CF91      		pop r28
+ 1269 062c 1F91      		pop r17
+ 1270 062e 0F91      		pop r16
+ 1271 0630 0895      		ret
+ 1272               	.L80:
+ 277:motorctrl.c   ****                 if (m->current_pwm - m->deacceleration_step <= 0){
+ 1274               	.LM108:
+ 1275 0632 8BA5      		ldd r24,Y+43
+ 1276 0634 8017      		cp r24,r16
+ 1277 0636 01F0      		breq .L52
+ 278:motorctrl.c   ****                     m->current_pwm = 0;
+ 1279               	.LM109:
+ 1280 0638 8BA5      		ldd r24,Y+43
+ 1281 063a 2EA9      		ldd r18,Y+54
+ 1282 063c 90E0      		ldi r25,0
+ 1283 063e 821B      		sub r24,r18
+ 1284 0640 9109      		sbc r25,__zero_reg__
+ 1285 0642 1816      		cp __zero_reg__,r24
+ 1286 0644 1906      		cpc __zero_reg__,r25
+ 1287 0646 04F4      		brge .L83
+ 282:motorctrl.c   ****                 }
+ 1289               	.LM110:
+ 1290 0648 8BA5      		ldd r24,Y+43
+ 1291 064a 280F      		add r18,r24
+ 1292 064c 2BA7      		std Y+43,r18
+ 1293               	.L65:
+ 284:motorctrl.c   ****                 delayLoop_us(m->deacceleration_time);
+ 1295               	.LM111:
+ 1296 064e 4BA5      		ldd r20,Y+43
+ 1297 0650 612F      		mov r22,r17
+ 1298 0652 CE01      		movw r24,r28
+ 1299 0654 0E94 0000 		call setMotor
+ 1300               	.LBB46:
+ 1301               	.LBB47:
+ 255:motorctrl.c   ****         _delay_us(47);
+ 1303               	.LM112:
+ 1304 0658 29AD      		ldd r18,Y+57
+ 1305 065a 3AAD      		ldd r19,Y+58
+ 1306 065c 3695      		lsr r19
+ 1307 065e 2795      		ror r18
+ 1308 0660 ABE7      		ldi r26,lo8(123)
+ 1309 0662 B4E1      		ldi r27,lo8(20)
+ 1310 0664 0E94 0000 		call __umulhisi3
+ 1311 0668 9695      		lsr r25
+ 1312 066a 8795      		ror r24
+ 1313 066c 0097      		sbiw r24,0
+ 1314 066e 01F0      		breq .L80
+ 1315 0670 20E0      		ldi r18,0
+ 1316 0672 30E0      		ldi r19,0
+ 1317               	.L66:
+ 1318               	.LBB48:
+ 1319               	.LBB49:
+ 1321               	.Ltext5:
+ 1323               	.LM113:
+ 1324 0674 4AEF      		ldi r20,lo8(-6)
+ 1325 0676 4A95      	1:	dec r20
+ 1326 0678 01F4      		brne 1b
+ 1327 067a 00C0      		rjmp .
+ 1328               	.LBE49:
+ 1329               	.LBE48:
+ 1331               	.Ltext6:
+ 255:motorctrl.c   ****         _delay_us(47);
+ 1333               	.LM114:
+ 1334 067c 2F5F      		subi r18,-1
+ 1335 067e 3F4F      		sbci r19,-1
+ 1336 0680 2817      		cp r18,r24
+ 1337 0682 3907      		cpc r19,r25
+ 1338 0684 01F4      		brne .L66
+ 1339 0686 00C0      		rjmp .L80
+ 1340               	.L58:
+ 1341               	.LBE47:
+ 1342               	.LBE46:
+ 270:motorctrl.c   ****                 }
+ 1344               	.LM115:
+ 1345 0688 8BA5      		ldd r24,Y+43
+ 1346 068a 280F      		add r18,r24
+ 1347 068c 2BA7      		std Y+43,r18
+ 1348 068e 00C0      		rjmp .L59
+ 1349               	.L83:
+ 279:motorctrl.c   ****                 }
+ 1351               	.LM116:
+ 1352 0690 1BA6      		std Y+43,__zero_reg__
+ 1353 0692 00C0      		rjmp .L65
+ 1361               	.Lscope15:
+ 1362               	.global	__fixunssfsi
+ 1365               	.global	getActuatorLength
+ 1367               	getActuatorLength:
+ 106:motorctrl.c   ****     uint16_t voltage = AVGVoltage(m->actuator_adc_channel, 0x40, NUMOFSAMPLES);
+ 1369               	.LM117:
+ 1370               	.LFBB16:
+ 1371 0694 A0E0      		ldi r26,0
+ 1372 0696 B0E0      		ldi r27,0
+ 1373 0698 E0E0      		ldi r30,lo8(gs(1f))
+ 1374 069a F0E0      		ldi r31,hi8(gs(1f))
+ 1375 069c 0C94 0000 		jmp __prologue_saves__+((18 - 12) * 2)
+ 1376               	1:
+ 1377               	/* prologue: function */
+ 1378               	/* frame size = 0 */
+ 1379               	/* stack size = 12 */
+ 1380               	.L__stack_usage = 12
+ 1381 06a0 EC01      		movw r28,r24
+ 107:motorctrl.c   ****     float effective_range = (m->actuator_max_length - m->actuator_min_length); 
+ 1383               	.LM118:
+ 1384 06a2 44E0      		ldi r20,lo8(4)
+ 1385 06a4 60E4      		ldi r22,lo8(64)
+ 1386 06a6 8F8D      		ldd r24,Y+31
+ 1387 06a8 0E94 0000 		call AVGVoltage
+ 1388 06ac 8C01      		movw r16,r24
+ 108:motorctrl.c   ****     uint16_t length =  m->actuator_min_length + (effective_range / 1024)*voltage; //volts per degre
+ 1390               	.LM119:
+ 1391 06ae FE01      		movw r30,r28
+ 1392 06b0 E45B      		subi r30,-76
+ 1393 06b2 FF4F      		sbci r31,-1
+ 1394 06b4 A080      		ld r10,Z
+ 1395 06b6 B180      		ldd r11,Z+1
+ 109:motorctrl.c   ****     
+ 1397               	.LM120:
+ 1398 06b8 B501      		movw r22,r10
+ 1399 06ba 80E0      		ldi r24,0
+ 1400 06bc 90E0      		ldi r25,0
+ 1401 06be 0E94 0000 		call __floatunsisf
+ 1402 06c2 6B01      		movw r12,r22
+ 1403 06c4 7C01      		movw r14,r24
+ 108:motorctrl.c   ****     uint16_t length =  m->actuator_min_length + (effective_range / 1024)*voltage; //volts per degre
+ 1405               	.LM121:
+ 1406 06c6 FE01      		movw r30,r28
+ 1407 06c8 E25B      		subi r30,-78
+ 1408 06ca FF4F      		sbci r31,-1
+ 1409 06cc 4081      		ld r20,Z
+ 1410 06ce 5181      		ldd r21,Z+1
+ 1411 06d0 4A19      		sub r20,r10
+ 1412 06d2 5B09      		sbc r21,r11
+ 1413 06d4 BA01      		movw r22,r20
+ 1414 06d6 80E0      		ldi r24,0
+ 1415 06d8 90E0      		ldi r25,0
+ 1416 06da 0E94 0000 		call __floatunsisf
+ 109:motorctrl.c   ****     
+ 1418               	.LM122:
+ 1419 06de 20E0      		ldi r18,0
+ 1420 06e0 30E0      		ldi r19,0
+ 1421 06e2 40E8      		ldi r20,lo8(-128)
+ 1422 06e4 5AE3      		ldi r21,lo8(58)
+ 1423 06e6 0E94 0000 		call __mulsf3
+ 1424 06ea 4B01      		movw r8,r22
+ 1425 06ec 5C01      		movw r10,r24
+ 1426 06ee B801      		movw r22,r16
+ 1427 06f0 80E0      		ldi r24,0
+ 1428 06f2 90E0      		ldi r25,0
+ 1429 06f4 0E94 0000 		call __floatunsisf
+ 1430 06f8 9B01      		movw r18,r22
+ 1431 06fa AC01      		movw r20,r24
+ 1432 06fc C501      		movw r24,r10
+ 1433 06fe B401      		movw r22,r8
+ 1434 0700 0E94 0000 		call __mulsf3
+ 1435 0704 9B01      		movw r18,r22
+ 1436 0706 AC01      		movw r20,r24
+ 1437 0708 C701      		movw r24,r14
+ 1438 070a B601      		movw r22,r12
+ 1439 070c 0E94 0000 		call __addsf3
+ 1440 0710 0E94 0000 		call __fixunssfsi
+ 1441 0714 6B01      		movw r12,r22
+ 1442 0716 7C01      		movw r14,r24
+ 111:motorctrl.c   ****         m->status = MAX_LIMIT;
+ 1444               	.LM123:
+ 1445 0718 FE01      		movw r30,r28
+ 1446 071a EE5A      		subi r30,-82
+ 1447 071c FF4F      		sbci r31,-1
+ 1448 071e 2081      		ld r18,Z
+ 1449 0720 3181      		ldd r19,Z+1
+ 1450 0722 6217      		cp r22,r18
+ 1451 0724 7307      		cpc r23,r19
+ 1452 0726 00F4      		brsh .L88
+ 116:motorctrl.c   ****         m->status = MIN_LIMIT;
+ 1454               	.LM124:
+ 1455 0728 FE01      		movw r30,r28
+ 1456 072a E05B      		subi r30,-80
+ 1457 072c FF4F      		sbci r31,-1
+ 1458 072e 2081      		ld r18,Z
+ 1459 0730 3181      		ldd r19,Z+1
+ 1460 0732 2617      		cp r18,r22
+ 1461 0734 3707      		cpc r19,r23
+ 1462 0736 00F4      		brsh .L89
+ 121:motorctrl.c   **** 
+ 1464               	.LM125:
+ 1465 0738 C601      		movw r24,r12
+ 1466               	/* epilogue start */
+ 1467 073a CDB7      		in r28,__SP_L__
+ 1468 073c DEB7      		in r29,__SP_H__
+ 1469 073e ECE0      		ldi r30, lo8(12)
+ 1470 0740 0C94 0000 		jmp __epilogue_restores__ + ((18 - 12) * 2)
+ 1471 0744 00C0      		rjmp .L90
+ 1472               	.L89:
+ 117:motorctrl.c   ****         motorControl(m, FORWARD, SHUTDOWN);  //SHUTDOWN motor
+ 1474               	.LM126:
+ 1475 0746 3896      		adiw r30,8
+ 1476 0748 84E0      		ldi r24,lo8(4)
+ 1477               	.L87:
+ 1478 074a 8083      		st Z,r24
+ 118:motorctrl.c   ****     }
+ 1480               	.LM127:
+ 1481 074c 40E0      		ldi r20,0
+ 1482 074e 61E0      		ldi r22,lo8(1)
+ 1483 0750 CE01      		movw r24,r28
+ 1484 0752 0E94 0000 		call motorControl
+ 121:motorctrl.c   **** 
+ 1486               	.LM128:
+ 1487 0756 C601      		movw r24,r12
+ 1488               	/* epilogue start */
+ 1489 0758 CDB7      		in r28,__SP_L__
+ 1490 075a DEB7      		in r29,__SP_H__
+ 1491 075c ECE0      		ldi r30, lo8(12)
+ 1492 075e 0C94 0000 		jmp __epilogue_restores__ + ((18 - 12) * 2)
+ 1493 0762 00C0      		rjmp .L90
+ 1494               	.L88:
+ 1495               	.LBB52:
+ 1496               	.LBB53:
+ 112:motorctrl.c   ****         motorControl(m, FORWARD, SHUTDOWN); //SHUTDOWN motor
+ 1498               	.LM129:
+ 1499 0764 3696      		adiw r30,6
+ 1500 0766 85E0      		ldi r24,lo8(5)
+ 1501 0768 00C0      		rjmp .L87
+ 1502               	.L90:
+ 1503               	.LBE53:
+ 1504               	.LBE52:
+ 1510               	.Lscope16:
+ 1513               	.global	getMotorPosition
+ 1515               	getMotorPosition:
+  90:motorctrl.c   ****     uint16_t alen = getActuatorLength(m);
+ 1517               	.LM130:
+ 1518               	.LFBB17:
+ 1519 076a CF93      		push r28
+ 1520 076c DF93      		push r29
+ 1521               	/* prologue: function */
+ 1522               	/* frame size = 0 */
+ 1523               	/* stack size = 2 */
+ 1524               	.L__stack_usage = 2
+ 1525 076e EC01      		movw r28,r24
+  91:motorctrl.c   ****     float aoffset = m->angle_correction(alen);
+ 1527               	.LM131:
+ 1528 0770 0E94 0000 		call getActuatorLength
+  92:motorctrl.c   ****     return m->angle_reference + aoffset;
+ 1530               	.LM132:
+ 1531 0774 FE01      		movw r30,r28
+ 1532 0776 E75A      		subi r30,-89
+ 1533 0778 FF4F      		sbci r31,-1
+ 1534 077a 0190      		ld __tmp_reg__,Z+
+ 1535 077c F081      		ld r31,Z
+ 1536 077e E02D      		mov r30,__tmp_reg__
+ 1537 0780 0995      		icall
+  93:motorctrl.c   ****     /*
+ 1539               	.LM133:
+ 1540 0782 C85B      		subi r28,-72
+ 1541 0784 DF4F      		sbci r29,-1
+ 1542 0786 2881      		ld r18,Y
+ 1543 0788 3981      		ldd r19,Y+1
+ 1544 078a 4A81      		ldd r20,Y+2
+ 1545 078c 5B81      		ldd r21,Y+3
+ 1546 078e 0E94 0000 		call __addsf3
+ 1547               	/* epilogue start */
+ 103:motorctrl.c   **** 
+ 1549               	.LM134:
+ 1550 0792 DF91      		pop r29
+ 1551 0794 CF91      		pop r28
+ 1552 0796 0895      		ret
+ 1557               	.Lscope17:
+ 1558               		.section	.rodata
+ 1559               	.LC0:
+ 1560 0000 2B00      		.word	43
+ 1561 0002 2A00      		.word	42
+ 1562 0004 06        		.byte	6
+ 1563 0005 4400      		.word	68
+ 1564 0007 23        		.byte	35
+ 1565 0008 4500      		.word	69
+ 1566 000a 00        		.byte	0
+ 1567 000b 4700      		.word	71
+ 1568 000d 2B00      		.word	43
+ 1569 000f 2A00      		.word	42
+ 1570 0011 05        		.byte	5
+ 1571 0012 4400      		.word	68
+ 1572 0014 83        		.byte	-125
+ 1573 0015 4500      		.word	69
+ 1574 0017 00        		.byte	0
+ 1575 0018 4800      		.word	72
+ 1576 001a 2B00      		.word	43
+ 1577 001c 2A00      		.word	42
+ 1578 001e 07        		.byte	7
+ 1579 001f 00        		.byte	0
+ 1580 0020 06        		.byte	6
+ 1581 0021 2800      		.word	40
+ 1582 0023 2700      		.word	39
+ 1583 0025 02        		.byte	2
+ 1584 0026 2800      		.word	40
+ 1585 0028 2700      		.word	39
+ 1586 002a 03        		.byte	3
+ 1587 002b 00        		.byte	0
+ 1588 002c 01        		.byte	1
+ 1589 002d 00        		.byte	0
+ 1590 002e 00        		.byte	0
+ 1591 002f 00        		.byte	0
+ 1592 0030 00        		.byte	0
+ 1593 0031 00        		.byte	0
+ 1594 0032 00        		.byte	0
+ 1595 0033 34        		.byte	52
+ 1596 0034 43        		.byte	67
+ 1597 0035 01        		.byte	1
+ 1598 0036 01        		.byte	1
+ 1599 0037 8813      		.word	5000
+ 1600 0039 8813      		.word	5000
+ 1601 003b 00        		.byte	0
+ 1602 003c 00        		.byte	0
+ 1603 003d 00        		.byte	0
+ 1604 003e 40        		.byte	64
+ 1605 003f C8        		.byte	-56
+ 1606 0040 00        		.byte	0
+ 1607 0041 00        		.byte	0
+ 1608 0042 C8        		.byte	-56
+ 1609 0043 42        		.byte	66
+ 1610 0044 00        		.byte	0
+ 1611 0045 00        		.byte	0
+ 1612 0046 20        		.byte	32
+ 1613 0047 43        		.byte	67
+ 1614 0048 00        		.byte	0
+ 1615 0049 00        		.byte	0
+ 1616 004a 34        		.byte	52
+ 1617 004b 43        		.byte	67
+ 1618 004c 0302      		.word	515
+ 1619 004e 7A03      		.word	890
+ 1620 0050 0802      		.word	520
+ 1621 0052 7003      		.word	880
+ 1622 0054 983A      		.word	15000
+ 1623 0056 0000      		.word	0
+ 1624 0058 00        		.byte	0
+ 1625 0059 0000      		.word	gs(angleConversion)
+ 1626               	.LC1:
+ 1627 005b 2500      		.word	37
+ 1628 005d 2400      		.word	36
+ 1629 005f 03        		.byte	3
+ 1630 0060 B000      		.word	176
+ 1631 0062 83        		.byte	-125
+ 1632 0063 B100      		.word	177
+ 1633 0065 04        		.byte	4
+ 1634 0066 B300      		.word	179
+ 1635 0068 2B00      		.word	43
+ 1636 006a 2A00      		.word	42
+ 1637 006c 03        		.byte	3
+ 1638 006d B000      		.word	176
+ 1639 006f 23        		.byte	35
+ 1640 0070 B100      		.word	177
+ 1641 0072 04        		.byte	4
+ 1642 0073 B400      		.word	180
+ 1643 0075 2500      		.word	37
+ 1644 0077 2400      		.word	36
+ 1645 0079 04        		.byte	4
+ 1646 007a 01        		.byte	1
+ 1647 007b 07        		.byte	7
+ 1648 007c 2800      		.word	40
+ 1649 007e 2700      		.word	39
+ 1650 0080 04        		.byte	4
+ 1651 0081 2800      		.word	40
+ 1652 0083 2700      		.word	39
+ 1653 0085 05        		.byte	5
+ 1654 0086 00        		.byte	0
+ 1655 0087 01        		.byte	1
+ 1656 0088 00        		.byte	0
+ 1657 0089 00        		.byte	0
+ 1658 008a 00        		.byte	0
+ 1659 008b 00        		.byte	0
+ 1660 008c 00        		.byte	0
+ 1661 008d 00        		.byte	0
+ 1662 008e 3E        		.byte	62
+ 1663 008f 42        		.byte	66
+ 1664 0090 01        		.byte	1
+ 1665 0091 01        		.byte	1
+ 1666 0092 8813      		.word	5000
+ 1667 0094 8813      		.word	5000
+ 1668 0096 00        		.byte	0
+ 1669 0097 00        		.byte	0
+ 1670 0098 00        		.byte	0
+ 1671 0099 40        		.byte	64
+ 1672 009a C8        		.byte	-56
+ 1673 009b 00        		.byte	0
+ 1674 009c 00        		.byte	0
+ 1675 009d A0        		.byte	-96
+ 1676 009e 40        		.byte	64
+ 1677 009f 00        		.byte	0
+ 1678 00a0 00        		.byte	0
+ 1679 00a1 AA        		.byte	-86
+ 1680 00a2 42        		.byte	66
+ 1681 00a3 00        		.byte	0
+ 1682 00a4 00        		.byte	0
+ 1683 00a5 A0        		.byte	-96
+ 1684 00a6 40        		.byte	64
+ 1685 00a7 5401      		.word	340
+ 1686 00a9 1C02      		.word	540
+ 1687 00ab 5E01      		.word	350
+ 1688 00ad 1202      		.word	530
+ 1689 00af 983A      		.word	15000
+ 1690 00b1 0000      		.word	0
+ 1691 00b3 00        		.byte	0
+ 1692 00b4 0000      		.word	gs(tiltConversion)
+ 1693               		.text
+ 1695               	.global	initMotor
+ 1697               	initMotor:
+ 296:motorctrl.c   ****     motor m1 =
+ 1699               	.LM135:
+ 1700               	.LFBB18:
+ 1701 0798 A1E1      		ldi r26,lo8(17)
+ 1702 079a B1E0      		ldi r27,lo8(1)
+ 1703 079c E0E0      		ldi r30,lo8(gs(1f))
+ 1704 079e F0E0      		ldi r31,hi8(gs(1f))
+ 1705 07a0 0C94 0000 		jmp __prologue_saves__+((18 - 7) * 2)
+ 1706               	1:
+ 1707               	/* prologue: function */
+ 1708               	/* frame size = 273 */
+ 1709               	/* stack size = 280 */
+ 1710               	.L__stack_usage = 280
+ 297:motorctrl.c   ****     {
+ 1712               	.LM136:
+ 1713 07a4 8BE5      		ldi r24,lo8(91)
+ 1714 07a6 E0E0      		ldi r30,lo8(.LC0)
+ 1715 07a8 F0E0      		ldi r31,hi8(.LC0)
+ 1716 07aa DE01      		movw r26,r28
+ 1717 07ac A954      		subi r26,73
+ 1718 07ae BF4F      		sbci r27,-1
+ 1719               		0:
+ 1720 07b0 0190      		ld r0,Z+
+ 1721 07b2 0D92      		st X+,r0
+ 1722 07b4 8A95      		dec r24
+ 1723 07b6 01F4      		brne 0b
+ 328:motorctrl.c   ****     {
+ 1725               	.LM137:
+ 1726 07b8 8BE5      		ldi r24,lo8(91)
+ 1727 07ba E0E0      		ldi r30,lo8(.LC1)
+ 1728 07bc F0E0      		ldi r31,hi8(.LC1)
+ 1729 07be DE01      		movw r26,r28
+ 1730 07c0 A45A      		subi r26,-92
+ 1731 07c2 BF4F      		sbci r27,-1
+ 1732               		0:
+ 1733 07c4 0190      		ld r0,Z+
+ 1734 07c6 0D92      		st X+,r0
+ 1735 07c8 8A95      		dec r24
+ 1736 07ca 01F4      		brne 0b
+ 359:motorctrl.c   ****     motors[TILT_MOTOR] = m2;
+ 1738               	.LM138:
+ 1739 07cc 8BE5      		ldi r24,lo8(91)
+ 1740 07ce FE01      		movw r30,r28
+ 1741 07d0 E954      		subi r30,73
+ 1742 07d2 FF4F      		sbci r31,-1
+ 1743 07d4 A0E0      		ldi r26,lo8(motors)
+ 1744 07d6 B0E0      		ldi r27,hi8(motors)
+ 1745               		0:
+ 1746 07d8 0190      		ld r0,Z+
+ 1747 07da 0D92      		st X+,r0
+ 1748 07dc 8A95      		dec r24
+ 1749 07de 01F4      		brne 0b
+ 360:motorctrl.c   **** 
+ 1751               	.LM139:
+ 1752 07e0 8BE5      		ldi r24,lo8(91)
+ 1753 07e2 FE01      		movw r30,r28
+ 1754 07e4 E45A      		subi r30,-92
+ 1755 07e6 FF4F      		sbci r31,-1
+ 1756 07e8 A0E0      		ldi r26,lo8(motors+91)
+ 1757 07ea B0E0      		ldi r27,hi8(motors+91)
+ 1758               		0:
+ 1759 07ec 0190      		ld r0,Z+
+ 1760 07ee 0D92      		st X+,r0
+ 1761 07f0 8A95      		dec r24
+ 1762 07f2 01F4      		brne 0b
+ 1763 07f4 80E0      		ldi r24,lo8(motors)
+ 1764 07f6 E82E      		mov r14,r24
+ 1765 07f8 80E0      		ldi r24,hi8(motors)
+ 1766 07fa F82E      		mov r15,r24
+ 1767               	.LBB54:
+ 1768               	.LBB55:
+ 364:motorctrl.c   ****         //Set direction and enable to output pins
+ 1770               	.LM140:
+ 1771 07fc 9BE5      		ldi r25,lo8(91)
+ 1772 07fe D92E      		mov r13,r25
+ 366:motorctrl.c   ****         *m.rev_dir_addr |= 1<<m.rev_pin;
+ 1774               	.LM141:
+ 1775 0800 01E0      		ldi r16,lo8(1)
+ 1776 0802 10E0      		ldi r17,0
+ 1777               	.L93:
+ 364:motorctrl.c   ****         //Set direction and enable to output pins
+ 1779               	.LM142:
+ 1780 0804 F701      		movw r30,r14
+ 1781 0806 DE01      		movw r26,r28
+ 1782 0808 1196      		adiw r26,1
+ 1783 080a 8D2D      		mov r24,r13
+ 1784               		0:
+ 1785 080c 0190      		ld r0,Z+
+ 1786 080e 0D92      		st X+,r0
+ 1787 0810 8A95      		dec r24
+ 1788 0812 01F4      		brne 0b
+ 366:motorctrl.c   ****         *m.rev_dir_addr |= 1<<m.rev_pin;
+ 1790               	.LM143:
+ 1791 0814 EB81      		ldd r30,Y+3
+ 1792 0816 FC81      		ldd r31,Y+4
+ 1793 0818 2081      		ld r18,Z
+ 1794 081a C801      		movw r24,r16
+ 1795 081c 0D80      		ldd r0,Y+5
+ 1796 081e 00C0      		rjmp 2f
+ 1797               		1:
+ 1798 0820 880F      		lsl r24
+ 1799 0822 991F      		rol r25
+ 1800               		2:
+ 1801 0824 0A94      		dec r0
+ 1802 0826 02F4      		brpl 1b
+ 1803 0828 822B      		or r24,r18
+ 1804 082a 8083      		st Z,r24
+ 367:motorctrl.c   ****         *m.enable_dir_addr |= 1<<m.enable_pin;
+ 1806               	.LM144:
+ 1807 082c E889      		ldd r30,Y+16
+ 1808 082e F989      		ldd r31,Y+17
+ 1809 0830 2081      		ld r18,Z
+ 1810 0832 C801      		movw r24,r16
+ 1811 0834 0A88      		ldd r0,Y+18
+ 1812 0836 00C0      		rjmp 2f
+ 1813               		1:
+ 1814 0838 880F      		lsl r24
+ 1815 083a 991F      		rol r25
+ 1816               		2:
+ 1817 083c 0A94      		dec r0
+ 1818 083e 02F4      		brpl 1b
+ 1819 0840 822B      		or r24,r18
+ 1820 0842 8083      		st Z,r24
+ 368:motorctrl.c   ****         
+ 1822               	.LM145:
+ 1823 0844 ED8D      		ldd r30,Y+29
+ 1824 0846 FE8D      		ldd r31,Y+30
+ 1825 0848 2081      		ld r18,Z
+ 1826 084a C801      		movw r24,r16
+ 1827 084c 0F8C      		ldd r0,Y+31
+ 1828 084e 00C0      		rjmp 2f
+ 1829               		1:
+ 1830 0850 880F      		lsl r24
+ 1831 0852 991F      		rol r25
+ 1832               		2:
+ 1833 0854 0A94      		dec r0
+ 1834 0856 02F4      		brpl 1b
+ 1835 0858 822B      		or r24,r18
+ 1836 085a 8083      		st Z,r24
+ 371:motorctrl.c   ****         *m.rev_port_addr &= ~(1<<m.rev_pin);
+ 1838               	.LM146:
+ 1839 085c E981      		ldd r30,Y+1
+ 1840 085e FA81      		ldd r31,Y+2
+ 1841 0860 9081      		ld r25,Z
+ 1842 0862 9801      		movw r18,r16
+ 1843 0864 0D80      		ldd r0,Y+5
+ 1844 0866 00C0      		rjmp 2f
+ 1845               		1:
+ 1846 0868 220F      		lsl r18
+ 1847 086a 331F      		rol r19
+ 1848               		2:
+ 1849 086c 0A94      		dec r0
+ 1850 086e 02F4      		brpl 1b
+ 1851 0870 822F      		mov r24,r18
+ 1852 0872 8095      		com r24
+ 1853 0874 8923      		and r24,r25
+ 1854 0876 8083      		st Z,r24
+ 372:motorctrl.c   ****         *m.enable_port_addr &= ~(1<<m.enable_pin);
+ 1856               	.LM147:
+ 1857 0878 EE85      		ldd r30,Y+14
+ 1858 087a FF85      		ldd r31,Y+15
+ 1859 087c 9081      		ld r25,Z
+ 1860 087e 9801      		movw r18,r16
+ 1861 0880 0A88      		ldd r0,Y+18
+ 1862 0882 00C0      		rjmp 2f
+ 1863               		1:
+ 1864 0884 220F      		lsl r18
+ 1865 0886 331F      		rol r19
+ 1866               		2:
+ 1867 0888 0A94      		dec r0
+ 1868 088a 02F4      		brpl 1b
+ 1869 088c 822F      		mov r24,r18
+ 1870 088e 8095      		com r24
+ 1871 0890 8923      		and r24,r25
+ 1872 0892 8083      		st Z,r24
+ 373:motorctrl.c   ****         
+ 1874               	.LM148:
+ 1875 0894 EB8D      		ldd r30,Y+27
+ 1876 0896 FC8D      		ldd r31,Y+28
+ 1877 0898 9081      		ld r25,Z
+ 1878 089a 9801      		movw r18,r16
+ 1879 089c 0F8C      		ldd r0,Y+31
+ 1880 089e 00C0      		rjmp 2f
+ 1881               		1:
+ 1882 08a0 220F      		lsl r18
+ 1883 08a2 331F      		rol r19
+ 1884               		2:
+ 1885 08a4 0A94      		dec r0
+ 1886 08a6 02F4      		brpl 1b
+ 1887 08a8 822F      		mov r24,r18
+ 1888 08aa 8095      		com r24
+ 1889 08ac 8923      		and r24,r25
+ 1890 08ae 8083      		st Z,r24
+ 376:motorctrl.c   ****         *m.fwd_TCCRB_addr = 0x00;//m.fwd_TCCRB_value;
+ 1892               	.LM149:
+ 1893 08b0 EE81      		ldd r30,Y+6
+ 1894 08b2 FF81      		ldd r31,Y+7
+ 1895 08b4 1082      		st Z,__zero_reg__
+ 377:motorctrl.c   ****         *m.fwd_OCR_addr = 0x00; //Init PWM to zero
+ 1897               	.LM150:
+ 1898 08b6 E985      		ldd r30,Y+9
+ 1899 08b8 FA85      		ldd r31,Y+10
+ 1900 08ba 1082      		st Z,__zero_reg__
+ 378:motorctrl.c   ****         
+ 1902               	.LM151:
+ 1903 08bc EC85      		ldd r30,Y+12
+ 1904 08be FD85      		ldd r31,Y+13
+ 1905 08c0 1082      		st Z,__zero_reg__
+ 381:motorctrl.c   ****         *m.rev_TCCRB_addr = 0x00; //m.rev_TCCRB_value;
+ 1907               	.LM152:
+ 1908 08c2 EB89      		ldd r30,Y+19
+ 1909 08c4 FC89      		ldd r31,Y+20
+ 1910 08c6 1082      		st Z,__zero_reg__
+ 382:motorctrl.c   ****         *m.rev_OCR_addr = 0x00; //Init PWM to zero
+ 1912               	.LM153:
+ 1913 08c8 EE89      		ldd r30,Y+22
+ 1914 08ca FF89      		ldd r31,Y+23
+ 1915 08cc 1082      		st Z,__zero_reg__
+ 383:motorctrl.c   ****         
+ 1917               	.LM154:
+ 1918 08ce E98D      		ldd r30,Y+25
+ 1919 08d0 FA8D      		ldd r31,Y+26
+ 1920 08d2 1082      		st Z,__zero_reg__
+ 386:motorctrl.c   ****         *m.actuator_1_dir_addr |= 1<<m.actuator_1_pin;
+ 1922               	.LM155:
+ 1923 08d4 EAA1      		ldd r30,Y+34
+ 1924 08d6 FBA1      		ldd r31,Y+35
+ 1925 08d8 2081      		ld r18,Z
+ 1926 08da C801      		movw r24,r16
+ 1927 08dc 0EA0      		ldd r0,Y+38
+ 1928 08de 00C0      		rjmp 2f
+ 1929               		1:
+ 1930 08e0 880F      		lsl r24
+ 1931 08e2 991F      		rol r25
+ 1932               		2:
+ 1933 08e4 0A94      		dec r0
+ 1934 08e6 02F4      		brpl 1b
+ 1935 08e8 822B      		or r24,r18
+ 1936 08ea 8083      		st Z,r24
+ 387:motorctrl.c   ****         *m.actuator_1_port_addr &= ~(1<<m.actuator_2_pin);
+ 1938               	.LM156:
+ 1939 08ec ECA1      		ldd r30,Y+36
+ 1940 08ee FDA1      		ldd r31,Y+37
+ 1941 08f0 2081      		ld r18,Z
+ 1942 08f2 C801      		movw r24,r16
+ 1943 08f4 0EA0      		ldd r0,Y+38
+ 1944 08f6 00C0      		rjmp 2f
+ 1945               		1:
+ 1946 08f8 880F      		lsl r24
+ 1947 08fa 991F      		rol r25
+ 1948               		2:
+ 1949 08fc 0A94      		dec r0
+ 1950 08fe 02F4      		brpl 1b
+ 1951 0900 822B      		or r24,r18
+ 1952 0902 8083      		st Z,r24
+ 388:motorctrl.c   ****         *m.actuator_1_dir_addr &= ~(1<<m.actuator_2_pin);
+ 1954               	.LM157:
+ 1955 0904 EAA1      		ldd r30,Y+34
+ 1956 0906 FBA1      		ldd r31,Y+35
+ 1957 0908 9081      		ld r25,Z
+ 1958 090a 9801      		movw r18,r16
+ 1959 090c 0BA4      		ldd r0,Y+43
+ 1960 090e 00C0      		rjmp 2f
+ 1961               		1:
+ 1962 0910 220F      		lsl r18
+ 1963 0912 331F      		rol r19
+ 1964               		2:
+ 1965 0914 0A94      		dec r0
+ 1966 0916 02F4      		brpl 1b
+ 1967 0918 822F      		mov r24,r18
+ 1968 091a 8095      		com r24
+ 1969 091c 8923      		and r24,r25
+ 1970 091e 8083      		st Z,r24
+ 389:motorctrl.c   ****         _delay_ms(10); //wait 10ms so ADC pins settle.
+ 1972               	.LM158:
+ 1973 0920 ECA1      		ldd r30,Y+36
+ 1974 0922 FDA1      		ldd r31,Y+37
+ 1975 0924 9081      		ld r25,Z
+ 1976 0926 9801      		movw r18,r16
+ 1977 0928 0BA4      		ldd r0,Y+43
+ 1978 092a 00C0      		rjmp 2f
+ 1979               		1:
+ 1980 092c 220F      		lsl r18
+ 1981 092e 331F      		rol r19
+ 1982               		2:
+ 1983 0930 0A94      		dec r0
+ 1984 0932 02F4      		brpl 1b
+ 1985 0934 822F      		mov r24,r18
+ 1986 0936 8095      		com r24
+ 1987 0938 8923      		and r24,r25
+ 1988 093a 8083      		st Z,r24
+ 1989               	.LBB56:
+ 1990               	.LBB57:
+ 1992               	.Ltext7:
+ 163:/usr/lib/avr/include/util/delay.h **** 
+ 1994               	.LM159:
+ 1995 093c 8FE3      		ldi r24,lo8(-25537)
+ 1996 093e 9CE9      		ldi r25,hi8(-25537)
+ 1997 0940 0197      	1:	sbiw r24,1
+ 1998 0942 01F4      		brne 1b
+ 1999 0944 00C0      		rjmp .
+ 2000 0946 0000      		nop
+ 2001               	.LBE57:
+ 2002               	.LBE56:
+ 2004               	.Ltext8:
+ 392:motorctrl.c   ****     }
+ 2006               	.LM160:
+ 2007 0948 CE01      		movw r24,r28
+ 2008 094a 0196      		adiw r24,1
+ 2009 094c 0E94 0000 		call getMotorPosition
+ 2010 0950 6EA7      		std Y+46,r22
+ 2011 0952 7FA7      		std Y+47,r23
+ 2012 0954 88AB      		std Y+48,r24
+ 2013 0956 99AB      		std Y+49,r25
+ 2014 0958 9BE5      		ldi r25,91
+ 2015 095a E90E      		add r14,r25
+ 2016 095c F11C      		adc r15,__zero_reg__
+ 2017               	.LBE55:
+ 363:motorctrl.c   ****         motor m = motors[i];
+ 2019               	.LM161:
+ 2020 095e 80E0      		ldi r24,lo8(motors+182)
+ 2021 0960 E816      		cp r14,r24
+ 2022 0962 80E0      		ldi r24,hi8(motors+182)
+ 2023 0964 F806      		cpc r15,r24
+ 2024 0966 01F0      		breq .+2
+ 2025 0968 00C0      		rjmp .L93
+ 2026               	/* epilogue start */
+ 2027               	.LBE54:
+ 399:motorctrl.c   **** 
+ 2029               	.LM162:
+ 2030 096a CF5E      		subi r28,-17
+ 2031 096c DE4F      		sbci r29,-2
+ 2032 096e E7E0      		ldi r30, lo8(7)
+ 2033 0970 0C94 0000 		jmp __epilogue_restores__ + ((18 - 7) * 2)
+ 2042               	.Lscope18:
+ 2044               	.global	getTiltActuatorCurrentLength
+ 2046               	getTiltActuatorCurrentLength:
+ 123:motorctrl.c   ****     return getActuatorLength(&motors[TILT_MOTOR]);
+ 2048               	.LM163:
+ 2049               	.LFBB19:
+ 2050               	/* prologue: function */
+ 2051               	/* frame size = 0 */
+ 2052               	/* stack size = 0 */
+ 2053               	.L__stack_usage = 0
+ 124:motorctrl.c   **** }
+ 2055               	.LM164:
+ 2056 0974 80E0      		ldi r24,lo8(motors+91)
+ 2057 0976 90E0      		ldi r25,hi8(motors+91)
+ 2058 0978 0E94 0000 		call getActuatorLength
+ 125:motorctrl.c   **** 
+ 2060               	.LM165:
+ 2061 097c 0895      		ret
+ 2063               	.Lscope19:
+ 2065               	.global	getAngleActuatorCurrentLength
+ 2067               	getAngleActuatorCurrentLength:
+ 127:motorctrl.c   ****     return getActuatorLength(&motors[ANGLE_MOTOR]);
+ 2069               	.LM166:
+ 2070               	.LFBB20:
+ 2071               	/* prologue: function */
+ 2072               	/* frame size = 0 */
+ 2073               	/* stack size = 0 */
+ 2074               	.L__stack_usage = 0
+ 128:motorctrl.c   **** }
+ 2076               	.LM167:
+ 2077 097e 80E0      		ldi r24,lo8(motors)
+ 2078 0980 90E0      		ldi r25,hi8(motors)
+ 2079 0982 0E94 0000 		call getActuatorLength
+ 129:motorctrl.c   **** 
+ 2081               	.LM168:
+ 2082 0986 0895      		ret
+ 2084               	.Lscope20:
+ 2085               	.global	__gtsf2
+ 2086               	.global	__ltsf2
+ 2089               	.global	motorControlLoop
+ 2091               	motorControlLoop:
+ 228:motorctrl.c   ****     //Check if we have been running too long
+ 2093               	.LM169:
+ 2094               	.LFBB21:
+ 2095 0988 A0E0      		ldi r26,0
+ 2096 098a B0E0      		ldi r27,0
+ 2097 098c E0E0      		ldi r30,lo8(gs(1f))
+ 2098 098e F0E0      		ldi r31,hi8(gs(1f))
+ 2099 0990 0C94 0000 		jmp __prologue_saves__+((18 - 16) * 2)
+ 2100               	1:
+ 2101               	/* prologue: function */
+ 2102               	/* frame size = 0 */
+ 2103               	/* stack size = 16 */
+ 2104               	.L__stack_usage = 16
+ 2105 0994 EC01      		movw r28,r24
+ 230:motorctrl.c   ****         m->status = TIMEOUT_ERROR;
+ 2107               	.LM170:
+ 2108 0996 8C01      		movw r16,r24
+ 2109 0998 0A5A      		subi r16,-86
+ 2110 099a 1F4F      		sbci r17,-1
+ 2111 099c FC01      		movw r30,r24
+ 2112 099e EC5A      		subi r30,-84
+ 2113 09a0 FF4F      		sbci r31,-1
+ 2114 09a2 D801      		movw r26,r16
+ 2115 09a4 2D91      		ld r18,X+
+ 2116 09a6 3C91      		ld r19,X
+ 2117 09a8 8081      		ld r24,Z
+ 2118 09aa 9181      		ldd r25,Z+1
+ 2119 09ac 2817      		cp r18,r24
+ 2120 09ae 3907      		cpc r19,r25
+ 2121 09b0 00F0      		brlo .+2
+ 2122 09b2 00C0      		rjmp .L112
+ 237:motorctrl.c   ****         motorControl(m, FORWARD, m->max_pwm);
+ 2124               	.LM171:
+ 2125 09b4 C9A8      		ldd r12,Y+49
+ 2126 09b6 DAA8      		ldd r13,Y+50
+ 2127 09b8 EBA8      		ldd r14,Y+51
+ 2128 09ba FCA8      		ldd r15,Y+52
+ 2129 09bc 6DA5      		ldd r22,Y+45
+ 2130 09be 7EA5      		ldd r23,Y+46
+ 2131 09c0 8FA5      		ldd r24,Y+47
+ 2132 09c2 98A9      		ldd r25,Y+48
+ 2133 09c4 8BAC      		ldd r8,Y+59
+ 2134 09c6 9CAC      		ldd r9,Y+60
+ 2135 09c8 ADAC      		ldd r10,Y+61
+ 2136 09ca BEAC      		ldd r11,Y+62
+ 2137 09cc A501      		movw r20,r10
+ 2138 09ce 9401      		movw r18,r8
+ 2139 09d0 0E94 0000 		call __addsf3
+ 2140 09d4 9B01      		movw r18,r22
+ 2141 09d6 AC01      		movw r20,r24
+ 2142 09d8 C701      		movw r24,r14
+ 2143 09da B601      		movw r22,r12
+ 2144 09dc 0E94 0000 		call __gtsf2
+ 2145 09e0 1816      		cp __zero_reg__,r24
+ 2146 09e2 04F4      		brge .L111
+ 237:motorctrl.c   ****         motorControl(m, FORWARD, m->max_pwm);
+ 2148               	.LM172:
+ 2149 09e4 7E01      		movw r14,r28
+ 2150 09e6 B8E5      		ldi r27,88
+ 2151 09e8 EB0E      		add r14,r27
+ 2152 09ea F11C      		adc r15,__zero_reg__
+ 2153 09ec F701      		movw r30,r14
+ 2154 09ee 8081      		ld r24,Z
+ 2155 09f0 8530      		cpi r24,lo8(5)
+ 2156 09f2 01F0      		breq .+2
+ 2157 09f4 00C0      		rjmp .L113
+ 242:motorctrl.c   ****         motorControl(m, BACKWARD, m->max_pwm);
+ 2159               	.LM173:
+ 2160 09f6 49A8      		ldd r4,Y+49
+ 2161 09f8 5AA8      		ldd r5,Y+50
+ 2162 09fa 6BA8      		ldd r6,Y+51
+ 2163 09fc 7CA8      		ldd r7,Y+52
+ 2164 09fe 6DA5      		ldd r22,Y+45
+ 2165 0a00 7EA5      		ldd r23,Y+46
+ 2166 0a02 8FA5      		ldd r24,Y+47
+ 2167 0a04 98A9      		ldd r25,Y+48
+ 2168 0a06 A501      		movw r20,r10
+ 2169 0a08 9401      		movw r18,r8
+ 2170 0a0a 0E94 0000 		call __subsf3
+ 2171 0a0e 9B01      		movw r18,r22
+ 2172 0a10 AC01      		movw r20,r24
+ 2173 0a12 C301      		movw r24,r6
+ 2174 0a14 B201      		movw r22,r4
+ 2175 0a16 0E94 0000 		call __ltsf2
+ 2176 0a1a 87FF      		sbrs r24,7
+ 2177 0a1c 00C0      		rjmp .L103
+ 2178               	.L105:
+ 243:motorctrl.c   ****         m->timeout_value ++;
+ 2180               	.LM174:
+ 2181 0a1e 4FAD      		ldd r20,Y+63
+ 2182 0a20 60E0      		ldi r22,0
+ 2183 0a22 CE01      		movw r24,r28
+ 2184 0a24 0E94 0000 		call motorControl
+ 244:motorctrl.c   ****         m->status = RUNNING_BACKWARD;
+ 2186               	.LM175:
+ 2187 0a28 F801      		movw r30,r16
+ 2188 0a2a 8081      		ld r24,Z
+ 2189 0a2c 9181      		ldd r25,Z+1
+ 2190 0a2e 0196      		adiw r24,1
+ 2191 0a30 9183      		std Z+1,r25
+ 2192 0a32 8083      		st Z,r24
+ 245:motorctrl.c   ****     }
+ 2194               	.LM176:
+ 2195 0a34 82E0      		ldi r24,lo8(2)
+ 2196 0a36 D701      		movw r26,r14
+ 2197 0a38 8C93      		st X,r24
+ 2198               	/* epilogue start */
+ 252:motorctrl.c   **** 
+ 2200               	.LM177:
+ 2201 0a3a CDB7      		in r28,__SP_L__
+ 2202 0a3c DEB7      		in r29,__SP_H__
+ 2203 0a3e E0E1      		ldi r30, lo8(16)
+ 2204 0a40 0C94 0000 		jmp __epilogue_restores__ + ((18 - 16) * 2)
+ 2205 0a44 00C0      		rjmp .L114
+ 2206               	.L111:
+ 242:motorctrl.c   ****         motorControl(m, BACKWARD, m->max_pwm);
+ 2208               	.LM178:
+ 2209 0a46 C9A8      		ldd r12,Y+49
+ 2210 0a48 DAA8      		ldd r13,Y+50
+ 2211 0a4a EBA8      		ldd r14,Y+51
+ 2212 0a4c FCA8      		ldd r15,Y+52
+ 2213 0a4e 6DA5      		ldd r22,Y+45
+ 2214 0a50 7EA5      		ldd r23,Y+46
+ 2215 0a52 8FA5      		ldd r24,Y+47
+ 2216 0a54 98A9      		ldd r25,Y+48
+ 2217 0a56 A501      		movw r20,r10
+ 2218 0a58 9401      		movw r18,r8
+ 2219 0a5a 0E94 0000 		call __subsf3
+ 2220 0a5e 9B01      		movw r18,r22
+ 2221 0a60 AC01      		movw r20,r24
+ 2222 0a62 C701      		movw r24,r14
+ 2223 0a64 B601      		movw r22,r12
+ 2224 0a66 0E94 0000 		call __ltsf2
+ 2225 0a6a 87FF      		sbrs r24,7
+ 2226 0a6c 00C0      		rjmp .L115
+ 242:motorctrl.c   ****         motorControl(m, BACKWARD, m->max_pwm);
+ 2228               	.LM179:
+ 2229 0a6e 7E01      		movw r14,r28
+ 2230 0a70 98E5      		ldi r25,88
+ 2231 0a72 E90E      		add r14,r25
+ 2232 0a74 F11C      		adc r15,__zero_reg__
+ 2233 0a76 D701      		movw r26,r14
+ 2234 0a78 8C91      		ld r24,X
+ 2235 0a7a 8430      		cpi r24,lo8(4)
+ 2236 0a7c 01F4      		brne .L105
+ 2237               	.L103:
+ 248:motorctrl.c   ****         m->timeout_value = 0; //Clear timeout
+ 2239               	.LM180:
+ 2240 0a7e 40E0      		ldi r20,0
+ 2241 0a80 60E0      		ldi r22,0
+ 2242 0a82 CE01      		movw r24,r28
+ 2243 0a84 0E94 0000 		call motorControl
+ 249:motorctrl.c   ****         m->status = STATUS_OK;
+ 2245               	.LM181:
+ 2246 0a88 F801      		movw r30,r16
+ 2247 0a8a 1182      		std Z+1,__zero_reg__
+ 2248 0a8c 1082      		st Z,__zero_reg__
+ 250:motorctrl.c   ****     }
+ 2250               	.LM182:
+ 2251 0a8e D701      		movw r26,r14
+ 2252 0a90 1C92      		st X,__zero_reg__
+ 2253               	/* epilogue start */
+ 252:motorctrl.c   **** 
+ 2255               	.LM183:
+ 2256 0a92 CDB7      		in r28,__SP_L__
+ 2257 0a94 DEB7      		in r29,__SP_H__
+ 2258 0a96 E0E1      		ldi r30, lo8(16)
+ 2259 0a98 0C94 0000 		jmp __epilogue_restores__ + ((18 - 16) * 2)
+ 2260 0a9c 00C0      		rjmp .L114
+ 2261               	.L112:
+ 231:motorctrl.c   ****         motorControl(m, BACKWARD, 0); //Shutdown motor if it has been running too long.
+ 2263               	.LM184:
+ 2264 0a9e 3496      		adiw r30,4
+ 2265 0aa0 83E0      		ldi r24,lo8(3)
+ 2266 0aa2 8083      		st Z,r24
+ 232:motorctrl.c   ****         return;
+ 2268               	.LM185:
+ 2269 0aa4 40E0      		ldi r20,0
+ 2270 0aa6 60E0      		ldi r22,0
+ 2271 0aa8 CE01      		movw r24,r28
+ 2272 0aaa 0E94 0000 		call motorControl
+ 2273               	/* epilogue start */
+ 252:motorctrl.c   **** 
+ 2275               	.LM186:
+ 2276 0aae CDB7      		in r28,__SP_L__
+ 2277 0ab0 DEB7      		in r29,__SP_H__
+ 2278 0ab2 E0E1      		ldi r30, lo8(16)
+ 2279 0ab4 0C94 0000 		jmp __epilogue_restores__ + ((18 - 16) * 2)
+ 2280 0ab8 00C0      		rjmp .L114
+ 2281               	.L115:
+ 2282 0aba CE01      		movw r24,r28
+ 2283 0abc 885A      		subi r24,-88
+ 2284 0abe 9F4F      		sbci r25,-1
+ 2285 0ac0 7C01      		movw r14,r24
+ 2286 0ac2 00C0      		rjmp .L103
+ 2287               	.L113:
+ 238:motorctrl.c   ****         m->timeout_value ++; //update timeout variables
+ 2289               	.LM187:
+ 2290 0ac4 4FAD      		ldd r20,Y+63
+ 2291 0ac6 61E0      		ldi r22,lo8(1)
+ 2292 0ac8 CE01      		movw r24,r28
+ 2293 0aca 0E94 0000 		call motorControl
+ 239:motorctrl.c   ****         m->status = RUNNING_FORWARD;
+ 2295               	.LM188:
+ 2296 0ace D801      		movw r26,r16
+ 2297 0ad0 8D91      		ld r24,X+
+ 2298 0ad2 9C91      		ld r25,X
+ 2299 0ad4 1197      		sbiw r26,1
+ 2300 0ad6 0196      		adiw r24,1
+ 2301 0ad8 8D93      		st X+,r24
+ 2302 0ada 9C93      		st X,r25
+ 240:motorctrl.c   ****     }
+ 2304               	.LM189:
+ 2305 0adc 81E0      		ldi r24,lo8(1)
+ 2306 0ade F701      		movw r30,r14
+ 2307 0ae0 8083      		st Z,r24
+ 2308               	/* epilogue start */
+ 252:motorctrl.c   **** 
+ 2310               	.LM190:
+ 2311 0ae2 CDB7      		in r28,__SP_L__
+ 2312 0ae4 DEB7      		in r29,__SP_H__
+ 2313 0ae6 E0E1      		ldi r30, lo8(16)
+ 2314 0ae8 0C94 0000 		jmp __epilogue_restores__ + ((18 - 16) * 2)
+ 2315               	.L114:
+ 2317               	.Lscope21:
+ 2319               	.global	motorController
+ 2321               	motorController:
+ 216:motorctrl.c   ****     //Update current motor positions
+ 2323               	.LM191:
+ 2324               	.LFBB22:
+ 2325 0aec CF93      		push r28
+ 2326               	/* prologue: function */
+ 2327               	/* frame size = 0 */
+ 2328               	/* stack size = 1 */
+ 2329               	.L__stack_usage = 1
+ 2330               	.LBB58:
+ 220:motorctrl.c   ****         motorControlLoop(&motors[i]);
+ 2332               	.LM192:
+ 2333 0aee 80E0      		ldi r24,lo8(motors)
+ 2334 0af0 90E0      		ldi r25,hi8(motors)
+ 2335 0af2 0E94 0000 		call getMotorPosition
+ 2336 0af6 6093 0000 		sts motors+45,r22
+ 2337 0afa 7093 0000 		sts motors+45+1,r23
+ 2338 0afe 8093 0000 		sts motors+45+2,r24
+ 2339 0b02 9093 0000 		sts motors+45+3,r25
+ 221:motorctrl.c   ****         status += motors[i].status; //Collect status from all motors
+ 2341               	.LM193:
+ 2342 0b06 80E0      		ldi r24,lo8(motors)
+ 2343 0b08 90E0      		ldi r25,hi8(motors)
+ 2344 0b0a 0E94 0000 		call motorControlLoop
+ 222:motorctrl.c   ****     }
+ 2346               	.LM194:
+ 2347 0b0e C091 0000 		lds r28,motors+88
+ 220:motorctrl.c   ****         motorControlLoop(&motors[i]);
+ 2349               	.LM195:
+ 2350 0b12 80E0      		ldi r24,lo8(motors+91)
+ 2351 0b14 90E0      		ldi r25,hi8(motors+91)
+ 2352 0b16 0E94 0000 		call getMotorPosition
+ 2353 0b1a 6093 0000 		sts motors+136,r22
+ 2354 0b1e 7093 0000 		sts motors+136+1,r23
+ 2355 0b22 8093 0000 		sts motors+136+2,r24
+ 2356 0b26 9093 0000 		sts motors+136+3,r25
+ 221:motorctrl.c   ****         status += motors[i].status; //Collect status from all motors
+ 2358               	.LM196:
+ 2359 0b2a 80E0      		ldi r24,lo8(motors+91)
+ 2360 0b2c 90E0      		ldi r25,hi8(motors+91)
+ 2361 0b2e 0E94 0000 		call motorControlLoop
+ 222:motorctrl.c   ****     }
+ 2363               	.LM197:
+ 2364 0b32 8091 0000 		lds r24,motors+179
+ 2365               	.LBE58:
+ 225:motorctrl.c   **** 
+ 2367               	.LM198:
+ 2368 0b36 8C0F      		add r24,r28
+ 2369               	/* epilogue start */
+ 2370 0b38 CF91      		pop r28
+ 2371 0b3a 0895      		ret
+ 2373               	.Lscope22:
+ 2374               		.comm	motors,182,1
+ 2377               	.Letext0:
+ 2378               		.ident	"GCC: (GNU) 4.9.2"
+ 2379               	.global __do_copy_data
+ 2380               	.global __do_clear_bss
+DEFINED SYMBOLS
+                            *ABS*:00000000 motorctrl.c
+     /tmp/cceQqd3Z.s:2      *ABS*:0000003e __SP_H__
+     /tmp/cceQqd3Z.s:3      *ABS*:0000003d __SP_L__
+     /tmp/cceQqd3Z.s:4      *ABS*:0000003f __SREG__
+     /tmp/cceQqd3Z.s:5      *ABS*:00000000 __tmp_reg__
+     /tmp/cceQqd3Z.s:6      *ABS*:00000001 __zero_reg__
+     /tmp/cceQqd3Z.s:121    .text:00000000 angleConversion
+     /tmp/cceQqd3Z.s:286    .text:00000136 tiltConversion
+     /tmp/cceQqd3Z.s:460    .text:0000027a getAngle
+                            *COM*:000000b6 motors
+     /tmp/cceQqd3Z.s:482    .text:0000028c getTilt
+     /tmp/cceQqd3Z.s:507    .text:0000029e setAngle
+     /tmp/cceQqd3Z.s:591    .text:00000326 setTilt
+     /tmp/cceQqd3Z.s:676    .text:000003ae setMotorPosition
+     /tmp/cceQqd3Z.s:772    .text:00000438 getSetAngle
+     /tmp/cceQqd3Z.s:794    .text:0000044a getSetTilt
+     /tmp/cceQqd3Z.s:816    .text:0000045c getAngleMotorStatus
+     /tmp/cceQqd3Z.s:833    .text:00000462 getTiltMotorStatus
+     /tmp/cceQqd3Z.s:851    .text:00000468 delayLoop_us
+     /tmp/cceQqd3Z.s:908    .text:00000496 disableMotorPWM
+     /tmp/cceQqd3Z.s:975    .text:000004dc setMotor
+     /tmp/cceQqd3Z.s:1129   .text:00000594 motorControl
+     /tmp/cceQqd3Z.s:1367   .text:00000694 getActuatorLength
+     /tmp/cceQqd3Z.s:1515   .text:0000076a getMotorPosition
+     /tmp/cceQqd3Z.s:1697   .text:00000798 initMotor
+     /tmp/cceQqd3Z.s:2046   .text:00000974 getTiltActuatorCurrentLength
+     /tmp/cceQqd3Z.s:2067   .text:0000097e getAngleActuatorCurrentLength
+     /tmp/cceQqd3Z.s:2091   .text:00000988 motorControlLoop
+     /tmp/cceQqd3Z.s:2321   .text:00000aec motorController
+
+UNDEFINED SYMBOLS
+__floatunsisf
+__mulsf3
+__floatsisf
+__subsf3
+__addsf3
+__divsf3
+__umulhisi3
+sqrt
+atan
+__gesf2
+__lesf2
+__fixunssfsi
+__prologue_saves__
+AVGVoltage
+__epilogue_restores__
+__gtsf2
+__ltsf2
+__do_copy_data
+__do_clear_bss
