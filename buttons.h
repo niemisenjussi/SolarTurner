@@ -2,6 +2,8 @@
 #include <util/delay.h>
 #include <avr/interrupt.h>
 
+#define AUTO 1
+#define MANUAL 0
 
 void initButtons(void);
 uint8_t readAutoManualState(void);

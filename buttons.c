@@ -22,7 +22,7 @@
 
 #define TURN_RIGHT_DIR DDRD
 #define TURN_RIGHT_PORT PORTD
-#define TURN_RIGHT_INPUT PINB
+#define TURN_RIGHT_INPUT PIND
 #define TURN_RIGHT_PIN 4
 
 void initButtons(void){
@@ -43,12 +43,6 @@ void initButtons(void){
 }
 
 uint8_t readAutoManualState(void){
-    AUTO_MANUAL_SWITCH_DIR |= 1<<AUTO_MANUAL_SWITCH_PIN; //Input
-    AUTO_MANUAL_SWITCH_PORT &= ~(1<<AUTO_MANUAL_SWITCH_PIN); //Pulldown
-    //_delay_ms(1);
-    //AUTO_MANUAL_SWITCH_DIR &= ~(1<<AUTO_MANUAL_SWITCH_PIN); //Input
-    //AUTO_MANUAL_SWITCH_PORT &= ~(1<<AUTO_MANUAL_SWITCH_PIN); //Pulldown
-    //_delay_ms(10);
     if (AUTO_MANUAL_SWITCH_INPUT & (1<<AUTO_MANUAL_SWITCH_PIN)){
         return 1;
     }

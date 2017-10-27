@@ -24,17 +24,17 @@ FILE port;
 
 //16bit timer interrupt
 ISR(TIMER1_COMPA_vect){
-   // TOGGLE_LED
+//    TOGGLE_LED
 }
 
 void initSystemTimer(void){
-    TCCR1A = 0x00; // WGM11 = 0, WGM10 = 0   => CTC mode
+    //TCCR1A = 0x00; // WGM11 = 0, WGM10 = 0   => CTC mode
     // clock frequency = 16MHz / 1024 = 15625Hz
-    TCCR1B = 0x08 + 0x05; //WGM12 = 1, WGM 13 = 0        => CTC mode, Clock divider 1024 = 0x05
-    OCR1AH = 0x05; //Zero this when tests are done
-    OCR1AL = 0x64;  // interrupt 100 times per second 15625/156~about 100 
+    //TCCR1B = 0x08 + 0x05; //WGM12 = 1, WGM 13 = 0        => CTC mode, Clock divider 1024 = 0x05
+    //OCR1AH = 0x05; //Zero this when tests are done
+    //OCR1AL = 0x64;  // interrupt 100 times per second 15625/156~about 100 
     //Set interrupt to TIMER1 COMPA
-    TIMSK1 = 0x02; //OCIEA enabled
+    //TIMSK1 = 0x02; //OCIEA enabled
     GTCCR = 0x00;    
 }
 void initLED(void){
@@ -42,65 +42,68 @@ void initLED(void){
 }
 int main (int argc, char *argv[])
 {
+    _delay_ms(50);
 	USART_Init(&port, 115200);
 	USART0_Flush();
     initLED();
     initADC();
-    initMotor();
+    initMotor(&port);
 	initSerialParser(&port);
     initButtons();    
 
     initSystemTimer(); //Starts all timers which are used => GTCCR = 0x00;
+    
+    GTCCR = 0x00;
     sei();
-// 
-//     float (*acor)(double angle);
-//     float (*tcor)(double angle);
-//     acor = &angleConversion;
-//     tcor = &tiltConversion;
-//     for(uint16_t i=400;i<600;i++){
-//         double point = i;
-//         point /= 10;
-//         fprintf(&port, "angle d:%f a:%f\n",point,tcor(point));
-//         //_delay_ms(100);
-//     }
-//     while(1){}
-// 
-//     motorController(); //Update positions
-//     
-//     fprintf(&port, "\n\n\n");
-//     uint16_t tiltlen = getTiltActuatorCurrentLength();
-//     fprintf(&port, "tilt_len:%d\n",tiltlen);
-//     uint16_t anglelen = getAngleActuatorCurrentLength();
-//     fprintf(&port, "angle_len:%d\n",anglelen);
-// 
-//     fprintf(&port, "tilt_angle:%5.2f\n",getTilt());
-//     fprintf(&port, "angle_angle:%5.2f\n",getAngle());
-//     
-//     fprintf(&port, "tilt_angle:%5.2f\n",tiltConversion(tiltlen));
-//     fprintf(&port, "angle_angle:%5.2f\n",angleConversion(anglelen));
-//  
 
-    uint8_t angle = 0;
-    uint8_t tilt = 125;
-    //motors[0].set_position = 51;
-    //motors[1].set_position = 244;
- 
+    uint8_t current_mode = readAutoManualState();
     while(1){
-	//	DISABLE_LED
-        fprintf(&port,"auto:%d, tilt:%d, turn:%d\n",readAutoManualState(),readTiltButtonState(),readTurnButtonState());
-     //   uint8_t status = motorController();
-     //   if (status > STATUS_OK){
-            //sendError();
-     //   }
-        setAngle(angle++);
-        setTilt(tilt++);
-        _delay_ms(100);
+        uint8_t status = motorController();
+        if (status > STATUS_OK){
+                //sendError();
+        }
         TOGGLE_LED
-    //    fprintf(&port,"angle:%d tilt:%d\n",getSetAngle(), getSetTilt());
-      //  fprintf(&port,"d_angle:%d d_tilt:%d\n",motors[0].set_position, motors[1].set_position);
+        if (readAutoManualState() == MANUAL){ 
+            switch(readTiltButtonState()){
+                case 1:{
+                    setAngle(getSetAngle()+2);
+                    fprintf(&port,"Turning 2 degrees left\n");
+                    while(readTiltButtonState() != 0){motorController();} //Wait until button is released
+                    break;
+                }
+                case 2:{
+                    setAngle(getSetAngle()-2);
+                    fprintf(&port,"Turning 2 degrees right\n");
+                    while(readTiltButtonState() != 0){motorController();} //Wait until button is released
+                    break;
+                }
+            }
+            switch(readTurnButtonState()){
+                case 1:{
+                    setTilt(getSetTilt()+2);
+                    fprintf(&port,"Turning 2 degree UP\n");
+                    while(readTurnButtonState() != 0){motorController();} //Wait until button is released
+                    break;
+                }
+                case 2:{
+                    setTilt(getSetTilt()-2);
+                    fprintf(&port,"Turning 2 degrees DOWN\n");
+                    while(readTurnButtonState() != 0){motorController();} //Wait until button is released
+                    break;
+                }
+            }
+        }
 
-	//	ENABLE_LED
-		//_delay_ms(100);
+        if (current_mode != readAutoManualState()){
+            if (readAutoManualState() == 1){
+                fprintf(&port, "Automatic mode turned ON\n");
+                current_mode = 1;
+            }
+            else{
+                fprintf(&port, "Manual mode Activated\n");
+                current_mode = 0;
+                shutdownMotors();
+            }
+        }
 	}
-	
 }

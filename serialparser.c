@@ -2,6 +2,7 @@
 #include "ADC.h"
 #include "USART.h"
 #include "motorctrl.h"
+#include "buttons.h"
 #include <avr/io.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -122,26 +123,31 @@ void parseCommands(void){
             uint8_t start = 0;
             uint8_t stop = 0;
                 
-            if (buffer[ring_read] == '1'){    
-                uint8_t succ = findParameter(':', ':', '\n', 20, &start, &stop);
-                if (succ == FIND_SUCCESS){
-                    uint8_t asuccess = setAngle(readFloat(start, stop));
-                    succ = findParameter(':', ':', '\n', 20, &start, &stop);
+            if (buffer[ring_read] == '1'){
+                if (readAutoManualState() == AUTO){    
+                    uint8_t succ = findParameter(':', ':', '\n', 20, &start, &stop);
                     if (succ == FIND_SUCCESS){
-                        uint8_t tsuccess = setTilt(readFloat(start, stop));
-                        if (asuccess == 0 && tsuccess == 0){
-                            fprintf(port,"OK\n");
+                        uint8_t asuccess = setAngle(readFloat(start, stop));
+                        succ = findParameter(':', ':', '\n', 20, &start, &stop);
+                        if (succ == FIND_SUCCESS){
+                            uint8_t tsuccess = setTilt(readFloat(start, stop));
+                            if (asuccess == 0 && tsuccess == 0){
+                                fprintf(port,"OK\n");
+                            }
+                            else{
+                                fprintf(port, "ERR\n");
+                            }
                         }
                         else{
                             fprintf(port, "ERR\n");
                         }
                     }
                     else{
-                        fprintf(port, "ERR\n");
+                        fprintf(port,"ERR\n");
                     }
                 }
                 else{
-                    fprintf(port,"ERR\n");
+                    fprintf(port, "MANUAL_MODE\n");
                 }
             }
             else{

@@ -3,6 +3,7 @@
 #include <avr/pgmspace.h>
 #include <avr/interrupt.h>
 #include <math.h>
+#include <stdio.h>
 
 //#define STATUS_OK 0
 //#define RUNNING_FORWARD 1
@@ -82,10 +83,10 @@ typedef struct{
      
 } motor;
 
-motor motors[NUM_OF_MOTORS];
+//motor motors[NUM_OF_MOTORS];
 
 //Public methods for accessing and setting values
-void initMotor(void);
+void initMotor(FILE *debugport);
 float getAngle(void);
 float getTilt(void);
 uint8_t setAngle(float angle);
@@ -97,15 +98,16 @@ uint16_t getAngleActuatorCurrentLength(void);
 motor_status getAngleMotorStatus(void);
 motor_status getTiltMotorStatus(void);
 motor_status motorController(void);
+void shutdownMotors(void);
 
 //private functions which are called only inside
-float getMotorPosition(motor *m); //returns motor final angle in degrees
-uint16_t getActuatorLength(motor *m); //Returns actuator length (body+actuated distance)
-uint8_t setMotorPosition(motor *m, float angle); //sets motor new angle
-void motorControlLoop(motor *m);
-void motorControl(motor *m, uint8_t dir, uint8_t pwm);
-void disableMotorPWM(motor *m);
-void setMotor(motor *m, uint8_t dir, uint8_t pwm);
+float getMotorPosition(volatile motor *m); //returns motor final angle in degrees
+uint16_t getActuatorLength(volatile motor *m); //Returns actuator length (body+actuated distance)
+uint8_t setMotorPosition(volatile motor *m, float angle); //sets motor new angle
+void motorControlLoop(volatile motor *m);
+void motorControl(volatile motor *m, uint8_t dir, uint8_t pwm);
+void disableMotorPWM(volatile motor *m);
+void setMotor(volatile motor *m, uint8_t dir, uint8_t pwm);
 void delayLoop_us(uint16_t delay); 
 float angleConversion(uint16_t y);
 float tiltConversion(uint16_t y);
