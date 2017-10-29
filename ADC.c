@@ -7,17 +7,12 @@
 
 uint16_t GetVoltage(uint8_t Sensor, uint8_t ADCRange)
 {
-    int Voltage = 0;
     ADMUX = Sensor+ADCRange;
     ADCSRA = 0b11000111; //tämä toimi AC kanssa 128 jakaja
     
     do {} while (bit_is_set(ADCSRA,6));
     
-    Voltage = ADCW;     
-    
-    if (Voltage < 0) {Voltage = 0;}
-    
-    return Voltage;
+    return ADCW;     
 }
 
 void initADC(void){
@@ -27,14 +22,21 @@ void initADC(void){
 
 
 uint16_t AVGVoltage(uint8_t Sensor, uint8_t ADCRange, uint8_t num_of_samples){
-    
+    GetVoltage(Sensor,ADCRange);    
     uint32_t res = 0;
     for (uint8_t i=0; i<num_of_samples; i++){
         res += GetVoltage(Sensor, ADCRange);
-        _delay_us(10);
+        _delay_us(50);
     }
     uint16_t final = res/num_of_samples;
     return final;
 }
 
+uint32_t Actuator_ADC(uint8_t Sensor, uint8_t ADCRange){
+    uint32_t res = 0;
+    for (uint8_t i=0; i<10;i++){
+        res += GetVoltage(Sensor, ADCRange);
+    }
+    return res;
+}
 

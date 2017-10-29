@@ -52,17 +52,26 @@ int main (int argc, char *argv[])
     initButtons();    
 
     initSystemTimer(); //Starts all timers which are used => GTCCR = 0x00;
-    
+//     
+//     for (uint16_t i = 340; i < 540; i++){
+//         fprintf(&port, "tilt:%5.2f f:%d\n",tiltConversion(i),i);
+//     }
+// 
+//     for (uint16_t i = 515; i < 890; i++){
+//         fprintf(&port, "angle:%5.2f f:%d\n",angleConversion(i),i);
+//     }
+//     while(1){}
+// 
     GTCCR = 0x00;
     sei();
 
     uint8_t current_mode = readAutoManualState();
     while(1){
         uint8_t status = motorController();
-        if (status > STATUS_OK){
+//        if (status > STATUS_OK){
                 //sendError();
-        }
-        TOGGLE_LED
+//        }
+
         if (readAutoManualState() == MANUAL){ 
             switch(readTiltButtonState()){
                 case 1:{
@@ -92,6 +101,9 @@ int main (int argc, char *argv[])
                     break;
                 }
             }
+        }
+        else{
+             TOGGLE_LED
         }
 
         if (current_mode != readAutoManualState()){

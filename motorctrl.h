@@ -74,13 +74,16 @@ typedef struct{
     float angle_reference;
     uint16_t actuator_min_length;
     uint16_t actuator_max_length;
+    float actuator_range;
     uint16_t actuator_min_limit;
     uint16_t actuator_max_limit;
     uint16_t timeout_setting;
     uint16_t timeout_value;
-    motor_status status;
+    volatile motor_status status;
     float (*angle_correction)(uint16_t f);
-     
+    uint16_t voltage_low_offset;
+    uint16_t voltage_high_offset; 
+    uint16_t voltage_range;
 } motor;
 
 //motor motors[NUM_OF_MOTORS];

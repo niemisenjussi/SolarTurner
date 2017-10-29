@@ -1,0 +1,711 @@
+   1               		.file	"test.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__tmp_reg__ = 0
+   6               	__zero_reg__ = 1
+   8               		.text
+   9               	.Ltext0:
+ 127               	.global	__vector_11
+ 129               	__vector_11:
+   1:test.c        **** #include <avr/io.h>	/* Device specific declarations */
+   2:test.c        **** #include <util/delay.h>
+   3:test.c        **** #include <avr/pgmspace.h>
+   4:test.c        **** #include <avr/interrupt.h>
+   5:test.c        **** #include <stdio.h>
+   6:test.c        **** #include <stdlib.h>
+   7:test.c        **** #include "USART.h"
+   8:test.c        **** #include "ADC.h"
+   9:test.c        **** #include "motorctrl.h"
+  10:test.c        **** #include "serialparser.h"
+  11:test.c        **** #include "buttons.h"
+  12:test.c        **** 
+  13:test.c        **** FILE port;
+  14:test.c        **** //motor motors[NUM_OF_MOTORS];
+  15:test.c        **** 
+  16:test.c        **** //Debug led control for seeing that main loop is running
+  17:test.c        **** #define LED_DDR DDRB
+  18:test.c        **** #define LED_PORT PORTB
+  19:test.c        **** #define LED_PIN PINB
+  20:test.c        **** #define LED_PIN_NUM 5
+  21:test.c        **** #define DISABLE_LED LED_PORT &= ~(1<<LED_PIN_NUM);
+  22:test.c        **** #define ENABLE_LED LED_PORT |= (1<<LED_PIN_NUM);
+  23:test.c        **** #define TOGGLE_LED LED_PORT ^= (1<<LED_PIN_NUM);
+  24:test.c        **** 
+  25:test.c        **** //16bit timer interrupt
+  26:test.c        **** ISR(TIMER1_COMPA_vect){
+ 131               	.LM0:
+ 132               	.LFBB1:
+ 133 0000 1F92      		push r1
+ 134 0002 0F92      		push r0
+ 135 0004 0FB6      		in r0,__SREG__
+ 136 0006 0F92      		push r0
+ 137 0008 1124      		clr __zero_reg__
+ 138               	/* prologue: Signal */
+ 139               	/* frame size = 0 */
+ 140               	/* stack size = 3 */
+ 141               	.L__stack_usage = 3
+ 142               	/* epilogue start */
+  27:test.c        **** //    TOGGLE_LED
+  28:test.c        **** }
+ 144               	.LM1:
+ 145 000a 0F90      		pop r0
+ 146 000c 0FBE      		out __SREG__,r0
+ 147 000e 0F90      		pop r0
+ 148 0010 1F90      		pop r1
+ 149 0012 1895      		reti
+ 151               	.Lscope1:
+ 153               	.global	initSystemTimer
+ 155               	initSystemTimer:
+  29:test.c        **** 
+  30:test.c        **** void initSystemTimer(void){
+ 157               	.LM2:
+ 158               	.LFBB2:
+ 159               	/* prologue: function */
+ 160               	/* frame size = 0 */
+ 161               	/* stack size = 0 */
+ 162               	.L__stack_usage = 0
+  31:test.c        ****     //TCCR1A = 0x00; // WGM11 = 0, WGM10 = 0   => CTC mode
+  32:test.c        ****     // clock frequency = 16MHz / 1024 = 15625Hz
+  33:test.c        ****     //TCCR1B = 0x08 + 0x05; //WGM12 = 1, WGM 13 = 0        => CTC mode, Clock divider 1024 = 0x05
+  34:test.c        ****     //OCR1AH = 0x05; //Zero this when tests are done
+  35:test.c        ****     //OCR1AL = 0x64;  // interrupt 100 times per second 15625/156~about 100 
+  36:test.c        ****     //Set interrupt to TIMER1 COMPA
+  37:test.c        ****     //TIMSK1 = 0x02; //OCIEA enabled
+  38:test.c        ****     GTCCR = 0x00;    
+ 164               	.LM3:
+ 165 0014 13BC      		out 0x23,__zero_reg__
+ 166 0016 0895      		ret
+ 168               	.Lscope2:
+ 170               	.global	initLED
+ 172               	initLED:
+  39:test.c        **** }
+  40:test.c        **** void initLED(void){
+ 174               	.LM4:
+ 175               	.LFBB3:
+ 176               	/* prologue: function */
+ 177               	/* frame size = 0 */
+ 178               	/* stack size = 0 */
+ 179               	.L__stack_usage = 0
+  41:test.c        ****     LED_DDR |= (1<<LED_PIN_NUM); 
+ 181               	.LM5:
+ 182 0018 259A      		sbi 0x4,5
+ 183 001a 0895      		ret
+ 185               	.Lscope3:
+ 186               	.global	__addsf3
+ 187               		.section	.rodata.str1.1,"aMS",@progbits,1
+ 188               	.LC0:
+ 189 0000 5475 726E 		.string	"Turning 2 degrees left\n"
+ 189      696E 6720 
+ 189      3220 6465 
+ 189      6772 6565 
+ 189      7320 6C65 
+ 190               	.global	__subsf3
+ 191               	.LC1:
+ 192 0018 5475 726E 		.string	"Turning 2 degrees right\n"
+ 192      696E 6720 
+ 192      3220 6465 
+ 192      6772 6565 
+ 192      7320 7269 
+ 193               	.LC2:
+ 194 0031 5475 726E 		.string	"Turning 2 degree UP\n"
+ 194      696E 6720 
+ 194      3220 6465 
+ 194      6772 6565 
+ 194      2055 500A 
+ 195               	.LC3:
+ 196 0046 5475 726E 		.string	"Turning 2 degrees DOWN\n"
+ 196      696E 6720 
+ 196      3220 6465 
+ 196      6772 6565 
+ 196      7320 444F 
+ 197               	.LC4:
+ 198 005e 4175 746F 		.string	"Automatic mode turned ON\n"
+ 198      6D61 7469 
+ 198      6320 6D6F 
+ 198      6465 2074 
+ 198      7572 6E65 
+ 199               	.LC5:
+ 200 0078 4D61 6E75 		.string	"Manual mode Activated\n"
+ 200      616C 206D 
+ 200      6F64 6520 
+ 200      4163 7469 
+ 200      7661 7465 
+ 201               		.section	.text.startup,"ax",@progbits
+ 205               	.global	main
+ 207               	main:
+  42:test.c        **** }
+  43:test.c        **** int main (int argc, char *argv[])
+  44:test.c        **** {
+ 209               	.LM6:
+ 210               	.LFBB4:
+ 211               	/* prologue: function */
+ 212               	/* frame size = 0 */
+ 213               	/* stack size = 0 */
+ 214               	.L__stack_usage = 0
+ 215               	.LBB9:
+ 216               	.LBB10:
+ 218               	.Ltext1:
+   1:/usr/lib/avr/include/util/delay.h **** /* Copyright (c) 2002, Marek Michalkiewicz
+   2:/usr/lib/avr/include/util/delay.h ****    Copyright (c) 2004,2005,2007 Joerg Wunsch
+   3:/usr/lib/avr/include/util/delay.h ****    Copyright (c) 2007  Florin-Viorel Petrov
+   4:/usr/lib/avr/include/util/delay.h ****    All rights reserved.
+   5:/usr/lib/avr/include/util/delay.h **** 
+   6:/usr/lib/avr/include/util/delay.h ****    Redistribution and use in source and binary forms, with or without
+   7:/usr/lib/avr/include/util/delay.h ****    modification, are permitted provided that the following conditions are met:
+   8:/usr/lib/avr/include/util/delay.h **** 
+   9:/usr/lib/avr/include/util/delay.h ****    * Redistributions of source code must retain the above copyright
+  10:/usr/lib/avr/include/util/delay.h ****      notice, this list of conditions and the following disclaimer.
+  11:/usr/lib/avr/include/util/delay.h **** 
+  12:/usr/lib/avr/include/util/delay.h ****    * Redistributions in binary form must reproduce the above copyright
+  13:/usr/lib/avr/include/util/delay.h ****      notice, this list of conditions and the following disclaimer in
+  14:/usr/lib/avr/include/util/delay.h ****      the documentation and/or other materials provided with the
+  15:/usr/lib/avr/include/util/delay.h ****      distribution.
+  16:/usr/lib/avr/include/util/delay.h **** 
+  17:/usr/lib/avr/include/util/delay.h ****    * Neither the name of the copyright holders nor the names of
+  18:/usr/lib/avr/include/util/delay.h ****      contributors may be used to endorse or promote products derived
+  19:/usr/lib/avr/include/util/delay.h ****      from this software without specific prior written permission.
+  20:/usr/lib/avr/include/util/delay.h **** 
+  21:/usr/lib/avr/include/util/delay.h ****   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  22:/usr/lib/avr/include/util/delay.h ****   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  23:/usr/lib/avr/include/util/delay.h ****   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  24:/usr/lib/avr/include/util/delay.h ****   ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  25:/usr/lib/avr/include/util/delay.h ****   LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  26:/usr/lib/avr/include/util/delay.h ****   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  27:/usr/lib/avr/include/util/delay.h ****   SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  28:/usr/lib/avr/include/util/delay.h ****   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  29:/usr/lib/avr/include/util/delay.h ****   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  30:/usr/lib/avr/include/util/delay.h ****   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  31:/usr/lib/avr/include/util/delay.h ****   POSSIBILITY OF SUCH DAMAGE. */
+  32:/usr/lib/avr/include/util/delay.h **** 
+  33:/usr/lib/avr/include/util/delay.h **** /* $Id$ */
+  34:/usr/lib/avr/include/util/delay.h **** 
+  35:/usr/lib/avr/include/util/delay.h **** #ifndef _UTIL_DELAY_H_
+  36:/usr/lib/avr/include/util/delay.h **** #define _UTIL_DELAY_H_ 1
+  37:/usr/lib/avr/include/util/delay.h **** 
+  38:/usr/lib/avr/include/util/delay.h **** #ifndef __HAS_DELAY_CYCLES
+  39:/usr/lib/avr/include/util/delay.h **** #define __HAS_DELAY_CYCLES 1
+  40:/usr/lib/avr/include/util/delay.h **** #endif
+  41:/usr/lib/avr/include/util/delay.h **** 
+  42:/usr/lib/avr/include/util/delay.h **** #include <inttypes.h>
+  43:/usr/lib/avr/include/util/delay.h **** #include <util/delay_basic.h>
+  44:/usr/lib/avr/include/util/delay.h **** #include <math.h>
+  45:/usr/lib/avr/include/util/delay.h **** 
+  46:/usr/lib/avr/include/util/delay.h **** /** \file */
+  47:/usr/lib/avr/include/util/delay.h **** /** \defgroup util_delay <util/delay.h>: Convenience functions for busy-wait delay loops
+  48:/usr/lib/avr/include/util/delay.h ****     \code
+  49:/usr/lib/avr/include/util/delay.h ****     #define F_CPU 1000000UL  // 1 MHz
+  50:/usr/lib/avr/include/util/delay.h ****     //#define F_CPU 14.7456E6
+  51:/usr/lib/avr/include/util/delay.h ****     #include <util/delay.h>
+  52:/usr/lib/avr/include/util/delay.h ****     \endcode
+  53:/usr/lib/avr/include/util/delay.h **** 
+  54:/usr/lib/avr/include/util/delay.h ****     \note As an alternative method, it is possible to pass the
+  55:/usr/lib/avr/include/util/delay.h ****     F_CPU macro down to the compiler from the Makefile.
+  56:/usr/lib/avr/include/util/delay.h ****     Obviously, in that case, no \c \#define statement should be
+  57:/usr/lib/avr/include/util/delay.h ****     used.
+  58:/usr/lib/avr/include/util/delay.h **** 
+  59:/usr/lib/avr/include/util/delay.h ****     The functions in this header file are wrappers around the basic
+  60:/usr/lib/avr/include/util/delay.h ****     busy-wait functions from <util/delay_basic.h>.  They are meant as
+  61:/usr/lib/avr/include/util/delay.h ****     convenience functions where actual time values can be specified
+  62:/usr/lib/avr/include/util/delay.h ****     rather than a number of cycles to wait for.  The idea behind is
+  63:/usr/lib/avr/include/util/delay.h ****     that compile-time constant expressions will be eliminated by
+  64:/usr/lib/avr/include/util/delay.h ****     compiler optimization so floating-point expressions can be used
+  65:/usr/lib/avr/include/util/delay.h ****     to calculate the number of delay cycles needed based on the CPU
+  66:/usr/lib/avr/include/util/delay.h ****     frequency passed by the macro F_CPU.
+  67:/usr/lib/avr/include/util/delay.h **** 
+  68:/usr/lib/avr/include/util/delay.h ****     \note In order for these functions to work as intended, compiler
+  69:/usr/lib/avr/include/util/delay.h ****     optimizations <em>must</em> be enabled, and the delay time
+  70:/usr/lib/avr/include/util/delay.h ****     <em>must</em> be an expression that is a known constant at
+  71:/usr/lib/avr/include/util/delay.h ****     compile-time.  If these requirements are not met, the resulting
+  72:/usr/lib/avr/include/util/delay.h ****     delay will be much longer (and basically unpredictable), and
+  73:/usr/lib/avr/include/util/delay.h ****     applications that otherwise do not use floating-point calculations
+  74:/usr/lib/avr/include/util/delay.h ****     will experience severe code bloat by the floating-point library
+  75:/usr/lib/avr/include/util/delay.h ****     routines linked into the application.
+  76:/usr/lib/avr/include/util/delay.h **** 
+  77:/usr/lib/avr/include/util/delay.h ****     The functions available allow the specification of microsecond, and
+  78:/usr/lib/avr/include/util/delay.h ****     millisecond delays directly, using the application-supplied macro
+  79:/usr/lib/avr/include/util/delay.h ****     F_CPU as the CPU clock frequency (in Hertz).
+  80:/usr/lib/avr/include/util/delay.h **** 
+  81:/usr/lib/avr/include/util/delay.h **** */
+  82:/usr/lib/avr/include/util/delay.h **** 
+  83:/usr/lib/avr/include/util/delay.h **** #if !defined(__DOXYGEN__)
+  84:/usr/lib/avr/include/util/delay.h **** static inline void _delay_us(double __us) __attribute__((always_inline));
+  85:/usr/lib/avr/include/util/delay.h **** static inline void _delay_ms(double __ms) __attribute__((always_inline));
+  86:/usr/lib/avr/include/util/delay.h **** #endif
+  87:/usr/lib/avr/include/util/delay.h **** 
+  88:/usr/lib/avr/include/util/delay.h **** #ifndef F_CPU
+  89:/usr/lib/avr/include/util/delay.h **** /* prevent compiler error by supplying a default */
+  90:/usr/lib/avr/include/util/delay.h **** # warning "F_CPU not defined for <util/delay.h>"
+  91:/usr/lib/avr/include/util/delay.h **** # define F_CPU 1000000UL
+  92:/usr/lib/avr/include/util/delay.h **** #endif
+  93:/usr/lib/avr/include/util/delay.h **** 
+  94:/usr/lib/avr/include/util/delay.h **** #ifndef __OPTIMIZE__
+  95:/usr/lib/avr/include/util/delay.h **** # warning "Compiler optimizations disabled; functions from <util/delay.h> won't work as designed"
+  96:/usr/lib/avr/include/util/delay.h **** #endif
+  97:/usr/lib/avr/include/util/delay.h **** 
+  98:/usr/lib/avr/include/util/delay.h **** #if __HAS_DELAY_CYCLES && defined(__OPTIMIZE__) && \
+  99:/usr/lib/avr/include/util/delay.h ****   !defined(__DELAY_BACKWARD_COMPATIBLE__) &&	   \
+ 100:/usr/lib/avr/include/util/delay.h ****   __STDC_HOSTED__
+ 101:/usr/lib/avr/include/util/delay.h **** #  include <math.h>
+ 102:/usr/lib/avr/include/util/delay.h **** #endif
+ 103:/usr/lib/avr/include/util/delay.h **** 
+ 104:/usr/lib/avr/include/util/delay.h **** /**
+ 105:/usr/lib/avr/include/util/delay.h ****    \ingroup util_delay
+ 106:/usr/lib/avr/include/util/delay.h **** 
+ 107:/usr/lib/avr/include/util/delay.h ****    Perform a delay of \c __ms milliseconds, using _delay_loop_2().
+ 108:/usr/lib/avr/include/util/delay.h **** 
+ 109:/usr/lib/avr/include/util/delay.h ****    The macro F_CPU is supposed to be defined to a
+ 110:/usr/lib/avr/include/util/delay.h ****    constant defining the CPU clock frequency (in Hertz).
+ 111:/usr/lib/avr/include/util/delay.h **** 
+ 112:/usr/lib/avr/include/util/delay.h ****    The maximal possible delay is 262.14 ms / F_CPU in MHz.
+ 113:/usr/lib/avr/include/util/delay.h **** 
+ 114:/usr/lib/avr/include/util/delay.h ****    When the user request delay which exceed the maximum possible one,
+ 115:/usr/lib/avr/include/util/delay.h ****    _delay_ms() provides a decreased resolution functionality. In this
+ 116:/usr/lib/avr/include/util/delay.h ****    mode _delay_ms() will work with a resolution of 1/10 ms, providing
+ 117:/usr/lib/avr/include/util/delay.h ****    delays up to 6.5535 seconds (independent from CPU frequency).  The
+ 118:/usr/lib/avr/include/util/delay.h ****    user will not be informed about decreased resolution.
+ 119:/usr/lib/avr/include/util/delay.h **** 
+ 120:/usr/lib/avr/include/util/delay.h ****    If the avr-gcc toolchain has __builtin_avr_delay_cycles(unsigned long)
+ 121:/usr/lib/avr/include/util/delay.h ****    support, maximal possible delay is 4294967.295 ms/ F_CPU in MHz. For
+ 122:/usr/lib/avr/include/util/delay.h ****    values greater than the maximal possible delay, overflows results in
+ 123:/usr/lib/avr/include/util/delay.h ****    no delay i.e., 0ms.
+ 124:/usr/lib/avr/include/util/delay.h **** 
+ 125:/usr/lib/avr/include/util/delay.h ****    Conversion of __us into clock cycles may not always result in integer.
+ 126:/usr/lib/avr/include/util/delay.h ****    By default, the clock cycles rounded up to next integer. This ensures that
+ 127:/usr/lib/avr/include/util/delay.h ****    the user gets atleast __us microseconds of delay.
+ 128:/usr/lib/avr/include/util/delay.h **** 
+ 129:/usr/lib/avr/include/util/delay.h ****    Alternatively, user can define __DELAY_ROUND_DOWN__ and __DELAY_ROUND_CLOSEST__
+ 130:/usr/lib/avr/include/util/delay.h ****    to round down and round to closest integer.
+ 131:/usr/lib/avr/include/util/delay.h **** 
+ 132:/usr/lib/avr/include/util/delay.h ****    Note: The new implementation of _delay_ms(double __ms) with 
+ 133:/usr/lib/avr/include/util/delay.h ****     __builtin_avr_delay_cycles(unsigned long) support is not backward compatible. 
+ 134:/usr/lib/avr/include/util/delay.h ****    User can define __DELAY_BACKWARD_COMPATIBLE__ to get a backward compatible delay.
+ 135:/usr/lib/avr/include/util/delay.h ****    Also, the backward compatible
+ 136:/usr/lib/avr/include/util/delay.h ****    algorithm will be chosen if the code is compiled in a <em>freestanding
+ 137:/usr/lib/avr/include/util/delay.h ****    environment</em> (GCC option \c -ffreestanding), as the math functions
+ 138:/usr/lib/avr/include/util/delay.h ****    required for rounding are not available to the compiler then.
+ 139:/usr/lib/avr/include/util/delay.h **** 
+ 140:/usr/lib/avr/include/util/delay.h ****  */
+ 141:/usr/lib/avr/include/util/delay.h **** void
+ 142:/usr/lib/avr/include/util/delay.h **** _delay_ms(double __ms)
+ 143:/usr/lib/avr/include/util/delay.h **** {
+ 144:/usr/lib/avr/include/util/delay.h **** 	double __tmp ; 
+ 145:/usr/lib/avr/include/util/delay.h **** #if __HAS_DELAY_CYCLES && defined(__OPTIMIZE__) && \
+ 146:/usr/lib/avr/include/util/delay.h ****   !defined(__DELAY_BACKWARD_COMPATIBLE__) &&	   \
+ 147:/usr/lib/avr/include/util/delay.h ****   __STDC_HOSTED__
+ 148:/usr/lib/avr/include/util/delay.h **** 	uint32_t __ticks_dc;
+ 149:/usr/lib/avr/include/util/delay.h **** 	extern void __builtin_avr_delay_cycles(unsigned long);
+ 150:/usr/lib/avr/include/util/delay.h **** 	__tmp = ((F_CPU) / 1e3) * __ms;
+ 151:/usr/lib/avr/include/util/delay.h **** 
+ 152:/usr/lib/avr/include/util/delay.h **** 	#if defined(__DELAY_ROUND_DOWN__)
+ 153:/usr/lib/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)fabs(__tmp);
+ 154:/usr/lib/avr/include/util/delay.h **** 
+ 155:/usr/lib/avr/include/util/delay.h **** 	#elif defined(__DELAY_ROUND_CLOSEST__)
+ 156:/usr/lib/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)(fabs(__tmp)+0.5);
+ 157:/usr/lib/avr/include/util/delay.h **** 
+ 158:/usr/lib/avr/include/util/delay.h **** 	#else
+ 159:/usr/lib/avr/include/util/delay.h **** 		//round up by default
+ 160:/usr/lib/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)(ceil(fabs(__tmp)));
+ 161:/usr/lib/avr/include/util/delay.h **** 	#endif
+ 162:/usr/lib/avr/include/util/delay.h **** 
+ 163:/usr/lib/avr/include/util/delay.h **** 	__builtin_avr_delay_cycles(__ticks_dc);
+ 220               	.LM7:
+ 221 0000 2FEF      		ldi r18,lo8(159999)
+ 222 0002 80E7      		ldi r24,hi8(159999)
+ 223 0004 92E0      		ldi r25,hlo8(159999)
+ 224 0006 2150      	1:	subi r18,1
+ 225 0008 8040      		sbci r24,0
+ 226 000a 9040      		sbci r25,0
+ 227 000c 01F4      		brne 1b
+ 228 000e 00C0      		rjmp .
+ 229 0010 0000      		nop
+ 230               	.LBE10:
+ 231               	.LBE9:
+ 233               	.Ltext2:
+  45:test.c        ****     _delay_ms(50);
+  46:test.c        **** 	USART_Init(&port, 115200);
+ 235               	.LM8:
+ 236 0012 40E0      		ldi r20,0
+ 237 0014 52EC      		ldi r21,lo8(-62)
+ 238 0016 61E0      		ldi r22,lo8(1)
+ 239 0018 70E0      		ldi r23,0
+ 240 001a 80E0      		ldi r24,lo8(port)
+ 241 001c 90E0      		ldi r25,hi8(port)
+ 242 001e 0E94 0000 		call USART_Init
+  47:test.c        **** 	USART0_Flush();
+ 244               	.LM9:
+ 245 0022 0E94 0000 		call USART0_Flush
+ 246               	.LBB11:
+ 247               	.LBB12:
+  41:test.c        **** }
+ 249               	.LM10:
+ 250 0026 259A      		sbi 0x4,5
+ 251               	.LBE12:
+ 252               	.LBE11:
+  48:test.c        ****     initLED();
+  49:test.c        ****     initADC();
+ 254               	.LM11:
+ 255 0028 0E94 0000 		call initADC
+  50:test.c        ****     initMotor(&port);
+ 257               	.LM12:
+ 258 002c 80E0      		ldi r24,lo8(port)
+ 259 002e 90E0      		ldi r25,hi8(port)
+ 260 0030 0E94 0000 		call initMotor
+  51:test.c        **** 	initSerialParser(&port);
+ 262               	.LM13:
+ 263 0034 80E0      		ldi r24,lo8(port)
+ 264 0036 90E0      		ldi r25,hi8(port)
+ 265 0038 0E94 0000 		call initSerialParser
+  52:test.c        ****     initButtons();    
+ 267               	.LM14:
+ 268 003c 0E94 0000 		call initButtons
+ 269               	.LBB13:
+ 270               	.LBB14:
+  38:test.c        **** }
+ 272               	.LM15:
+ 273 0040 13BC      		out 0x23,__zero_reg__
+ 274               	.LBE14:
+ 275               	.LBE13:
+  53:test.c        **** 
+  54:test.c        ****     initSystemTimer(); //Starts all timers which are used => GTCCR = 0x00;
+  55:test.c        **** //     
+  56:test.c        **** //     for (uint16_t i = 340; i < 540; i++){
+  57:test.c        **** //         fprintf(&port, "tilt:%5.2f f:%d\n",tiltConversion(i),i);
+  58:test.c        **** //     }
+  59:test.c        **** // 
+  60:test.c        **** //     for (uint16_t i = 515; i < 890; i++){
+  61:test.c        **** //         fprintf(&port, "angle:%5.2f f:%d\n",angleConversion(i),i);
+  62:test.c        **** //     }
+  63:test.c        **** //     while(1){}
+  64:test.c        **** // 
+  65:test.c        ****     GTCCR = 0x00;
+ 277               	.LM16:
+ 278 0042 13BC      		out 0x23,__zero_reg__
+  66:test.c        ****     sei();
+ 280               	.LM17:
+ 281               	/* #APP */
+ 282               	 ;  66 "test.c" 1
+ 283 0044 7894      		sei
+ 284               	 ;  0 "" 2
+  67:test.c        **** 
+  68:test.c        ****     uint8_t current_mode = readAutoManualState();
+ 286               	.LM18:
+ 287               	/* #NOAPP */
+ 288 0046 0E94 0000 		call readAutoManualState
+ 289 004a C82F      		mov r28,r24
+ 290               	.LBB15:
+  69:test.c        ****     while(1){
+  70:test.c        ****         uint8_t status = motorController();
+  71:test.c        **** //        if (status > STATUS_OK){
+  72:test.c        ****                 //sendError();
+  73:test.c        **** //        }
+  74:test.c        **** 
+  75:test.c        ****         if (readAutoManualState() == MANUAL){ 
+  76:test.c        ****             switch(readTiltButtonState()){
+  77:test.c        ****                 case 1:{
+  78:test.c        ****                     setAngle(getSetAngle()+2);
+  79:test.c        ****                     fprintf(&port,"Turning 2 degrees left\n");
+  80:test.c        ****                     while(readTiltButtonState() != 0){motorController();} //Wait until button is re
+  81:test.c        ****                     break;
+  82:test.c        ****                 }
+  83:test.c        ****                 case 2:{
+  84:test.c        ****                     setAngle(getSetAngle()-2);
+  85:test.c        ****                     fprintf(&port,"Turning 2 degrees right\n");
+  86:test.c        ****                     while(readTiltButtonState() != 0){motorController();} //Wait until button is re
+  87:test.c        ****                     break;
+  88:test.c        ****                 }
+  89:test.c        ****             }
+  90:test.c        ****             switch(readTurnButtonState()){
+  91:test.c        ****                 case 1:{
+  92:test.c        ****                     setTilt(getSetTilt()+2);
+  93:test.c        ****                     fprintf(&port,"Turning 2 degree UP\n");
+  94:test.c        ****                     while(readTurnButtonState() != 0){motorController();} //Wait until button is re
+  95:test.c        ****                     break;
+  96:test.c        ****                 }
+  97:test.c        ****                 case 2:{
+  98:test.c        ****                     setTilt(getSetTilt()-2);
+  99:test.c        ****                     fprintf(&port,"Turning 2 degrees DOWN\n");
+ 100:test.c        ****                     while(readTurnButtonState() != 0){motorController();} //Wait until button is re
+ 101:test.c        ****                     break;
+ 102:test.c        ****                 }
+ 103:test.c        ****             }
+ 104:test.c        ****         }
+ 105:test.c        ****         else{
+ 106:test.c        ****              TOGGLE_LED
+ 292               	.LM19:
+ 293 004c D0E2      		ldi r29,lo8(32)
+ 294 004e 00C0      		rjmp .L23
+ 295               	.L6:
+ 296 0050 95B1      		in r25,0x5
+ 297 0052 9D27      		eor r25,r29
+ 298 0054 95B9      		out 0x5,r25
+ 299               	.L15:
+ 107:test.c        ****         }
+ 108:test.c        **** 
+ 109:test.c        ****         if (current_mode != readAutoManualState()){
+ 301               	.LM20:
+ 302 0056 0E94 0000 		call readAutoManualState
+ 303 005a 8C13      		cpse r24,r28
+ 304 005c 00C0      		rjmp .L28
+ 305               	.L23:
+  70:test.c        **** //        if (status > STATUS_OK){
+ 307               	.LM21:
+ 308 005e 0E94 0000 		call motorController
+  75:test.c        ****             switch(readTiltButtonState()){
+ 310               	.LM22:
+ 311 0062 0E94 0000 		call readAutoManualState
+ 312 0066 8111      		cpse r24,__zero_reg__
+ 313 0068 00C0      		rjmp .L6
+  76:test.c        ****                 case 1:{
+ 315               	.LM23:
+ 316 006a 0E94 0000 		call readTiltButtonState
+ 317 006e 8130      		cpi r24,lo8(1)
+ 318 0070 01F4      		brne .+2
+ 319 0072 00C0      		rjmp .L8
+ 320 0074 8230      		cpi r24,lo8(2)
+ 321 0076 01F4      		brne .L7
+  84:test.c        ****                     fprintf(&port,"Turning 2 degrees right\n");
+ 323               	.LM24:
+ 324 0078 0E94 0000 		call getSetAngle
+ 325 007c 20E0      		ldi r18,0
+ 326 007e 30E0      		ldi r19,0
+ 327 0080 40E0      		ldi r20,0
+ 328 0082 50E4      		ldi r21,lo8(64)
+ 329 0084 0E94 0000 		call __subsf3
+ 330 0088 0E94 0000 		call setAngle
+  85:test.c        ****                     while(readTiltButtonState() != 0){motorController();} //Wait until button is re
+ 332               	.LM25:
+ 333 008c 20E0      		ldi r18,lo8(port)
+ 334 008e 30E0      		ldi r19,hi8(port)
+ 335 0090 48E1      		ldi r20,lo8(24)
+ 336 0092 50E0      		ldi r21,0
+ 337 0094 61E0      		ldi r22,lo8(1)
+ 338 0096 70E0      		ldi r23,0
+ 339 0098 80E0      		ldi r24,lo8(.LC1)
+ 340 009a 90E0      		ldi r25,hi8(.LC1)
+ 341 009c 0E94 0000 		call fwrite
+  86:test.c        ****                     break;
+ 343               	.LM26:
+ 344 00a0 00C0      		rjmp .L12
+ 345               	.L13:
+  86:test.c        ****                     break;
+ 347               	.LM27:
+ 348 00a2 0E94 0000 		call motorController
+ 349               	.L12:
+  86:test.c        ****                     break;
+ 351               	.LM28:
+ 352 00a6 0E94 0000 		call readTiltButtonState
+ 353 00aa 8111      		cpse r24,__zero_reg__
+ 354 00ac 00C0      		rjmp .L13
+ 355               	.L7:
+  90:test.c        ****                 case 1:{
+ 357               	.LM29:
+ 358 00ae 0E94 0000 		call readTurnButtonState
+ 359 00b2 8130      		cpi r24,lo8(1)
+ 360 00b4 01F4      		brne .+2
+ 361 00b6 00C0      		rjmp .L16
+ 362               	.L30:
+ 363 00b8 8230      		cpi r24,lo8(2)
+ 364 00ba 01F4      		brne .L15
+  98:test.c        ****                     fprintf(&port,"Turning 2 degrees DOWN\n");
+ 366               	.LM30:
+ 367 00bc 0E94 0000 		call getSetTilt
+ 368 00c0 20E0      		ldi r18,0
+ 369 00c2 30E0      		ldi r19,0
+ 370 00c4 40E0      		ldi r20,0
+ 371 00c6 50E4      		ldi r21,lo8(64)
+ 372 00c8 0E94 0000 		call __subsf3
+ 373 00cc 0E94 0000 		call setTilt
+  99:test.c        ****                     while(readTurnButtonState() != 0){motorController();} //Wait until button is re
+ 375               	.LM31:
+ 376 00d0 20E0      		ldi r18,lo8(port)
+ 377 00d2 30E0      		ldi r19,hi8(port)
+ 378 00d4 47E1      		ldi r20,lo8(23)
+ 379 00d6 50E0      		ldi r21,0
+ 380 00d8 61E0      		ldi r22,lo8(1)
+ 381 00da 70E0      		ldi r23,0
+ 382 00dc 80E0      		ldi r24,lo8(.LC3)
+ 383 00de 90E0      		ldi r25,hi8(.LC3)
+ 384 00e0 0E94 0000 		call fwrite
+ 100:test.c        ****                     break;
+ 386               	.LM32:
+ 387 00e4 00C0      		rjmp .L20
+ 388               	.L21:
+ 100:test.c        ****                     break;
+ 390               	.LM33:
+ 391 00e6 0E94 0000 		call motorController
+ 392               	.L20:
+ 100:test.c        ****                     break;
+ 394               	.LM34:
+ 395 00ea 0E94 0000 		call readTurnButtonState
+ 396 00ee 8111      		cpse r24,__zero_reg__
+ 397 00f0 00C0      		rjmp .L21
+ 399               	.LM35:
+ 400 00f2 0E94 0000 		call readAutoManualState
+ 401 00f6 8C17      		cp r24,r28
+ 402 00f8 01F4      		brne .+2
+ 403 00fa 00C0      		rjmp .L23
+ 404               	.L28:
+ 110:test.c        ****             if (readAutoManualState() == 1){
+ 406               	.LM36:
+ 407 00fc 0E94 0000 		call readAutoManualState
+ 111:test.c        ****                 fprintf(&port, "Automatic mode turned ON\n");
+ 409               	.LM37:
+ 410 0100 20E0      		ldi r18,lo8(port)
+ 411 0102 30E0      		ldi r19,hi8(port)
+ 110:test.c        ****             if (readAutoManualState() == 1){
+ 413               	.LM38:
+ 414 0104 8130      		cpi r24,lo8(1)
+ 415 0106 01F4      		brne .+2
+ 416 0108 00C0      		rjmp .L29
+ 112:test.c        ****                 current_mode = 1;
+ 113:test.c        ****             }
+ 114:test.c        ****             else{
+ 115:test.c        ****                 fprintf(&port, "Manual mode Activated\n");
+ 418               	.LM39:
+ 419 010a 46E1      		ldi r20,lo8(22)
+ 420 010c 50E0      		ldi r21,0
+ 421 010e 61E0      		ldi r22,lo8(1)
+ 422 0110 70E0      		ldi r23,0
+ 423 0112 80E0      		ldi r24,lo8(.LC5)
+ 424 0114 90E0      		ldi r25,hi8(.LC5)
+ 425 0116 0E94 0000 		call fwrite
+ 116:test.c        ****                 current_mode = 0;
+ 117:test.c        ****                 shutdownMotors();
+ 427               	.LM40:
+ 428 011a 0E94 0000 		call shutdownMotors
+ 116:test.c        ****                 current_mode = 0;
+ 430               	.LM41:
+ 431 011e C0E0      		ldi r28,0
+ 432 0120 00C0      		rjmp .L23
+ 433               	.L8:
+  78:test.c        ****                     fprintf(&port,"Turning 2 degrees left\n");
+ 435               	.LM42:
+ 436 0122 0E94 0000 		call getSetAngle
+ 437 0126 20E0      		ldi r18,0
+ 438 0128 30E0      		ldi r19,0
+ 439 012a 40E0      		ldi r20,0
+ 440 012c 50E4      		ldi r21,lo8(64)
+ 441 012e 0E94 0000 		call __addsf3
+ 442 0132 0E94 0000 		call setAngle
+  79:test.c        ****                     while(readTiltButtonState() != 0){motorController();} //Wait until button is re
+ 444               	.LM43:
+ 445 0136 20E0      		ldi r18,lo8(port)
+ 446 0138 30E0      		ldi r19,hi8(port)
+ 447 013a 47E1      		ldi r20,lo8(23)
+ 448 013c 50E0      		ldi r21,0
+ 449 013e 61E0      		ldi r22,lo8(1)
+ 450 0140 70E0      		ldi r23,0
+ 451 0142 80E0      		ldi r24,lo8(.LC0)
+ 452 0144 90E0      		ldi r25,hi8(.LC0)
+ 453 0146 0E94 0000 		call fwrite
+  80:test.c        ****                     break;
+ 455               	.LM44:
+ 456 014a 00C0      		rjmp .L10
+ 457               	.L11:
+  80:test.c        ****                     break;
+ 459               	.LM45:
+ 460 014c 0E94 0000 		call motorController
+ 461               	.L10:
+  80:test.c        ****                     break;
+ 463               	.LM46:
+ 464 0150 0E94 0000 		call readTiltButtonState
+ 465 0154 8111      		cpse r24,__zero_reg__
+ 466 0156 00C0      		rjmp .L11
+  90:test.c        ****                 case 1:{
+ 468               	.LM47:
+ 469 0158 0E94 0000 		call readTurnButtonState
+ 470 015c 8130      		cpi r24,lo8(1)
+ 471 015e 01F0      		breq .+2
+ 472 0160 00C0      		rjmp .L30
+ 473               	.L16:
+  92:test.c        ****                     fprintf(&port,"Turning 2 degree UP\n");
+ 475               	.LM48:
+ 476 0162 0E94 0000 		call getSetTilt
+ 477 0166 20E0      		ldi r18,0
+ 478 0168 30E0      		ldi r19,0
+ 479 016a 40E0      		ldi r20,0
+ 480 016c 50E4      		ldi r21,lo8(64)
+ 481 016e 0E94 0000 		call __addsf3
+ 482 0172 0E94 0000 		call setTilt
+  93:test.c        ****                     while(readTurnButtonState() != 0){motorController();} //Wait until button is re
+ 484               	.LM49:
+ 485 0176 20E0      		ldi r18,lo8(port)
+ 486 0178 30E0      		ldi r19,hi8(port)
+ 487 017a 44E1      		ldi r20,lo8(20)
+ 488 017c 50E0      		ldi r21,0
+ 489 017e 61E0      		ldi r22,lo8(1)
+ 490 0180 70E0      		ldi r23,0
+ 491 0182 80E0      		ldi r24,lo8(.LC2)
+ 492 0184 90E0      		ldi r25,hi8(.LC2)
+ 493 0186 0E94 0000 		call fwrite
+  94:test.c        ****                     break;
+ 495               	.LM50:
+ 496 018a 00C0      		rjmp .L18
+ 497               	.L19:
+  94:test.c        ****                     break;
+ 499               	.LM51:
+ 500 018c 0E94 0000 		call motorController
+ 501               	.L18:
+  94:test.c        ****                     break;
+ 503               	.LM52:
+ 504 0190 0E94 0000 		call readTurnButtonState
+ 505 0194 8111      		cpse r24,__zero_reg__
+ 506 0196 00C0      		rjmp .L19
+ 507 0198 00C0      		rjmp .L15
+ 508               	.L29:
+ 111:test.c        ****                 current_mode = 1;
+ 510               	.LM53:
+ 511 019a 49E1      		ldi r20,lo8(25)
+ 512 019c 50E0      		ldi r21,0
+ 513 019e 61E0      		ldi r22,lo8(1)
+ 514 01a0 70E0      		ldi r23,0
+ 515 01a2 80E0      		ldi r24,lo8(.LC4)
+ 516 01a4 90E0      		ldi r25,hi8(.LC4)
+ 517 01a6 0E94 0000 		call fwrite
+ 112:test.c        ****             }
+ 519               	.LM54:
+ 520 01aa C1E0      		ldi r28,lo8(1)
+ 521 01ac 00C0      		rjmp .L23
+ 522               	.LBE15:
+ 527               	.Lscope4:
+ 528               		.comm	port,14,1
+ 530               		.text
+ 532               	.Letext0:
+ 533               		.ident	"GCC: (GNU) 4.9.2"
+ 534               	.global __do_copy_data
+ 535               	.global __do_clear_bss
+DEFINED SYMBOLS
+                            *ABS*:00000000 test.c
+     /tmp/cckNCuya.s:2      *ABS*:0000003e __SP_H__
+     /tmp/cckNCuya.s:3      *ABS*:0000003d __SP_L__
+     /tmp/cckNCuya.s:4      *ABS*:0000003f __SREG__
+     /tmp/cckNCuya.s:5      *ABS*:00000000 __tmp_reg__
+     /tmp/cckNCuya.s:6      *ABS*:00000001 __zero_reg__
+     /tmp/cckNCuya.s:129    .text:00000000 __vector_11
+     /tmp/cckNCuya.s:155    .text:00000014 initSystemTimer
+     /tmp/cckNCuya.s:172    .text:00000018 initLED
+     /tmp/cckNCuya.s:207    .text.startup:00000000 main
+                            *COM*:0000000e port
+
+UNDEFINED SYMBOLS
+__addsf3
+__subsf3
+USART_Init
+USART0_Flush
+initADC
+initMotor
+initSerialParser
+initButtons
+readAutoManualState
+motorController
+readTiltButtonState
+getSetAngle
+setAngle
+fwrite
+readTurnButtonState
+getSetTilt
+setTilt
+shutdownMotors
+__do_copy_data
+__do_clear_bss

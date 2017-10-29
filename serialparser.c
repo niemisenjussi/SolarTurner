@@ -169,6 +169,9 @@ void parseCommands(void){
             else if (value == '4'){ //get motor statuses
                 fprintf(port, "G4:%d:%d\n", getAngleMotorStatus(), getTiltMotorStatus());
             }
+            else if (value == '5'){
+                fprintf(port, "G5:%d:%d\n", getAngleActuatorCurrentLength(), getTiltActuatorCurrentLength());
+            }
             else{
                 fprintf(port,"ERR\n");
             }
