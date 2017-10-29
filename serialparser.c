@@ -172,6 +172,9 @@ void parseCommands(void){
             else if (value == '5'){
                 fprintf(port, "G5:%d:%d\n", getAngleActuatorCurrentLength(), getTiltActuatorCurrentLength());
             }
+            else if (value == '6'){
+                fprintf(port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTurnButtonState());
+            }
             else{
                 fprintf(port,"ERR\n");
             }
