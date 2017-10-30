@@ -150,6 +150,32 @@ void parseCommands(void){
                     fprintf(port, "MANUAL_MODE\n");
                 }
             }
+            else if (buffer[ring_read] == '2'){
+                if (readAutoManualState() == AUTO){    
+                    uint8_t succ = findParameter(':', ':', '\n', 20, &start, &stop);
+                    if (succ == FIND_SUCCESS){
+                        uint8_t asuccess = setAngleMotorLength(readInt16(start, stop));
+                        succ = findParameter(':', ':', '\n', 20, &start, &stop);
+                        if (succ == FIND_SUCCESS){
+                            uint8_t tsuccess = setTiltMotorLength(readInt16(start, stop));
+                            if (asuccess == 0 && tsuccess == 0){
+                                fprintf(port,"OK\n");
+                            }
+                            else{
+                                fprintf(port, "ERR\n");
+                            }
+                        }
+                    }
+                }
+                else{
+                    fprintf(port, "MANUAL_MODE\n");
+                }
+            }
+            else if (buffer[ring_read] == '3'){
+                if (readAutoManualState() == AUTO){ 
+                    calibrateMotors();
+                }
+            }
             else{
                 fprintf(port,"ERR\n");
             }

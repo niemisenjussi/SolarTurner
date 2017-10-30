@@ -63,11 +63,14 @@ typedef struct{
     volatile uint8_t current_dir;
     volatile float current_position;
     volatile float set_position;
+    volatile uint16_t current_length;
+    volatile uint16_t set_length;
     uint8_t acceleration_step;
     uint8_t deacceleration_step;
     uint16_t acceleration_time;
     uint16_t deacceleration_time;
     float angle_hysteresis;
+    uint8_t length_hysteresis;
     uint8_t max_pwm;
     float min_angle;
     float angle_range;
@@ -102,6 +105,12 @@ motor_status getAngleMotorStatus(void);
 motor_status getTiltMotorStatus(void);
 motor_status motorController(void);
 void shutdownMotors(void);
+
+uint8_t setTiltMotorLength(uint16_t length);
+uint8_t setAngleMotorLength(uint16_t length);
+void setLengthLoop(void);
+
+void calibrateMotors(void);
 
 //private functions which are called only inside
 float getMotorPosition(volatile motor *m); //returns motor final angle in degrees

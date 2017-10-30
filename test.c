@@ -67,7 +67,9 @@ int main (int argc, char *argv[])
 
     uint8_t current_mode = readAutoManualState();
     while(1){
-        uint8_t status = motorController();
+       // uint8_t status = motorController();
+        setLengthLoop();
+
 //        if (status > STATUS_OK){
                 //sendError();
 //        }
