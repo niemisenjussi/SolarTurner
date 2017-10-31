@@ -9,6 +9,9 @@
 //#define RUNNING_FORWARD 1
 //#define RUNNING_BACKWARD 2
 //#define TIMEOUT_ERROR 3
+#define FORWARD 1
+#define BACKWARD 0
+
 
 #define NUM_OF_MOTORS 2
 
@@ -87,6 +90,7 @@ typedef struct{
     uint16_t voltage_low_offset;
     uint16_t voltage_high_offset; 
     uint16_t voltage_range;
+    uint16_t (*angle_to_length)(float angle);
 } motor;
 
 //motor motors[NUM_OF_MOTORS];
@@ -110,12 +114,14 @@ uint8_t setTiltMotorLength(uint16_t length);
 uint8_t setAngleMotorLength(uint16_t length);
 void setLengthLoop(void);
 
+void forceMotors(uint8_t dir, uint8_t time);
 void calibrateMotors(void);
 
 //private functions which are called only inside
 float getMotorPosition(volatile motor *m); //returns motor final angle in degrees
 uint16_t getActuatorLength(volatile motor *m); //Returns actuator length (body+actuated distance)
 uint8_t setMotorPosition(volatile motor *m, float angle); //sets motor new angle
+float getMotorSetPosition(volatile motor *m);
 void motorControlLoop(volatile motor *m);
 void motorControl(volatile motor *m, uint8_t dir, uint8_t pwm);
 void disableMotorPWM(volatile motor *m);
@@ -123,7 +129,8 @@ void setMotor(volatile motor *m, uint8_t dir, uint8_t pwm);
 void delayLoop_us(uint16_t delay); 
 float angleConversion(uint16_t y);
 float tiltConversion(uint16_t y);
-
+uint16_t angleDegToLength(float angle);
+uint16_t tiltDegToLength(float angle);
 
 
 

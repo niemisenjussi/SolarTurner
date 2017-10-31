@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
+void printerr(void);
 void read_until_line_end(void);
 void initSerialParser(FILE *serialport);
 void parseCommands(void);

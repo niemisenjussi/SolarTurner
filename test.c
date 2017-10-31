@@ -52,13 +52,17 @@ int main (int argc, char *argv[])
     initButtons();    
 
     initSystemTimer(); //Starts all timers which are used => GTCCR = 0x00;
-//     
-//     for (uint16_t i = 340; i < 540; i++){
-//         fprintf(&port, "tilt:%5.2f f:%d\n",tiltConversion(i),i);
+    
+//     for (uint16_t i = 340; i < 540; i+=10){
+//         float angle = tiltConversion(i);
+//         uint16_t l = tiltDegToLength(angle);
+//         fprintf(&port, "tilt:%5.2f f:%d len:%d\n", angle, i, l);
 //     }
 // 
-//     for (uint16_t i = 515; i < 890; i++){
-//         fprintf(&port, "angle:%5.2f f:%d\n",angleConversion(i),i);
+//     for (uint16_t i = 515; i < 890; i+=10){
+//         float angle = angleConversion(i);
+//         uint16_t l = angleDegToLength(angle);
+//         fprintf(&port, "angle:%5.2f f:%d len:%d\n",angle, i, l);
 //     }
 //     while(1){}
 // 

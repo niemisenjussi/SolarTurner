@@ -116,6 +116,10 @@ uint8_t findParameter(char startchar, char stopchar, char secondstopchar, uint8_
     return FIND_SUCCESS;
 }
 
+void printerr(void){
+    fprintf(port, "ERR\n");
+}
+
 void parseCommands(void){
     while (ring_read != ring_write){
         uint8_t command = buffer[ring_read++];
@@ -135,19 +139,19 @@ void parseCommands(void){
                                 fprintf(port,"OK\n");
                             }
                             else{
-                                fprintf(port, "ERR\n");
+                                printerr(); 
                             }
                         }
                         else{
-                            fprintf(port, "ERR\n");
+                            printerr();
                         }
                     }
                     else{
-                        fprintf(port,"ERR\n");
+                        printerr();
                     }
                 }
                 else{
-                    fprintf(port, "MANUAL_MODE\n");
+                    fprintf(port, "MAN\n");
                 }
             }
             else if (buffer[ring_read] == '2'){
@@ -162,13 +166,13 @@ void parseCommands(void){
                                 fprintf(port,"OK\n");
                             }
                             else{
-                                fprintf(port, "ERR\n");
+                                printerr();
                             }
                         }
                     }
                 }
                 else{
-                    fprintf(port, "MANUAL_MODE\n");
+                    fprintf(port, "MAN\n");
                 }
             }
             else if (buffer[ring_read] == '3'){
@@ -177,7 +181,7 @@ void parseCommands(void){
                 }
             }
             else{
-                fprintf(port,"ERR\n");
+                printerr();
             }
             read_until_line_end();
         }
@@ -202,8 +206,16 @@ void parseCommands(void){
                 fprintf(port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTurnButtonState());
             }
             else{
-                fprintf(port,"ERR\n");
+                printerr();
             }
+            read_until_line_end();
+        }
+        else if (command == 'F'){
+            forceMotors(FORWARD,30);
+            read_until_line_end();
+        }
+        else if (command == 'B'){
+            forceMotors(BACKWARD,30);
             read_until_line_end();
         }
         else if (command == 'A'){ //ADC read voltage, commands A0\n  A1\n ,A2\n ,A3\n ,A4\n and so on are possible
@@ -223,7 +235,7 @@ void parseCommands(void){
                 fprintf(port,"\n");
             }
             else{
-                fprintf(port, "ERR\n");
+                printerr();
             }
             read_until_line_end();
         }
