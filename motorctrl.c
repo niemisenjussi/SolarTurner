@@ -16,7 +16,6 @@
 #define PRESCALER 0x02 //PWM frequency divider
 #define NUMOFSAMPLES 4 //ADC averaging sample count
 
-#define MOTOR_HYSTERESIS 1.5  //IN Degrees
 #define LENGTH_HYSTERESIS 5 //in millimeters
 #define MOTOR_ACCELERATION 500 //wait time in micro seconds between speed increase
 #define MOTOR_ACC_STEP 1 //8bit PWM step per acceleration.
@@ -28,10 +27,10 @@
 #define TILT_RANGE 70.0
 
 #define ANGLE_REFERENCE 180.0 //heading by default South
-#define TILT_REFERENCE 5.0   //Tilted 5 degrees upward frow vertical angle
+#define TILT_REFERENCE 0.0   //Tilted 5 degrees upward frow vertical angle
 
-#define ANGLE_MOTOR_TIMEOUT 50000 // in milliseconds
-#define TILT_MOTOR_TIMEOUT 50000  // in milliseconds
+#define ANGLE_MOTOR_TIMEOUT 100000L // in milliseconds
+#define TILT_MOTOR_TIMEOUT 50000L  // in milliseconds
 
 //Angle correction factors, all values are millimeters
 #define ANGLE_X 700L //Distance from center to actuator lower point
@@ -102,18 +101,14 @@ volatile motor motors[] = {
  //        &PORTD, &DDRD, 7, //MOTOR Enable control
          ANGLE_ACTUATOR_ADC,
          ANGLE_ACTUATOR_CURRENT_ADC,
-         //&PORTC, &DDRC, 2,
-         //&PORTC, &DDRC, 3,
          0,       //pwm
          FORWARD,   //current dir
-        // 0.0,       //current position
          0,  //current length       
          0,  //current set length
          MOTOR_ACC_STEP,     //Acceleration step
          MOTOR_ACC_STEP,     //Deacceleration step
          MOTOR_ACCELERATION, //Acceleration time
          MOTOR_ACCELERATION, //deacceleration time
-        // MOTOR_HYSTERESIS,   //Anglular hysteresis in degrees
          LENGTH_HYSTERESIS,
          ANGLE_MAX_PWM,      //MAX pwm value for anglular movements
          MIN_ANGLE,          //Minimun allowed angle
@@ -142,18 +137,14 @@ volatile motor motors[] = {
   //       &PORTB, &DDRB, 4, //MOTOR Enable control
          TILT_ACTUATOR_ADC,
          TILT_ACTUATOR_CURRENT_ADC,
-         //&PORTC, &DDRC, 4,
-         //&PORTC, &DDRC, 5,
          0,         //PWM
          FORWARD,   //current dir
-         //0, //current position
          0,  //current length       
          0,  //current set lengthMOTOR_ACC_STEP,     //Acceleration step
          MOTOR_ACC_STEP,
          MOTOR_ACC_STEP,     //Deacceleration step
          MOTOR_ACCELERATION, //Acceleration time
          MOTOR_ACCELERATION, //deacceleration time
-        // MOTOR_HYSTERESIS,   //Anglular hysteresis in degrees
          LENGTH_HYSTERESIS,
          TILT_MAX_PWM,      //MAX pwm value for anglular movements
          MIN_TILT,          //Minimun allowed angle
@@ -174,6 +165,7 @@ volatile motor motors[] = {
          &tiltDegToLength
     }};
 
+volatile int8_t running_motor = -1;
 FILE *port;
 //Initialize MOTOR A, Angle motor
 //volatile motor motors[NUM_OF_MOTORS];
@@ -235,10 +227,12 @@ uint16_t getActuatorLength(volatile motor *m){
     if (length >= m->actuator_max_limit){
         m->status = MAX_LIMIT;
         motorControl(m, m->current_dir, SHUTDOWN); //SHUTDOWN motor
+        running_motor = -1;
     }
     else if(length <= m->actuator_min_limit){
         m->status = MIN_LIMIT;
         motorControl(m, m->current_dir, SHUTDOWN);  //SHUTDOWN motor
+        running_motor = -1;
     }
     return length;
 }
@@ -249,6 +243,14 @@ uint16_t getTiltActuatorCurrentLength(void){
 
 uint16_t getAngleActuatorCurrentLength(void){
     return getActuatorLength(&motors[ANGLE_MOTOR]);
+}
+
+uint16_t getTiltActuatorSetLength(void){
+    return motors[TILT_MOTOR].set_length;
+}
+
+uint16_t getAngleActuatorSetLength(void){
+    return motors[ANGLE_MOTOR].set_length;
 }
 
 //Returns angle between -90.0 - 90.0, input value is in millimeters.
@@ -370,41 +372,45 @@ uint8_t setAngleMotorLength(uint16_t length){
     }
 }
 
-void setLengthLoop(void){
+uint8_t setLengthLoop(void){
     uint8_t status = 0;
     for (uint8_t i = 0; i < NUM_OF_MOTORS; i++){
         volatile motor *m = &motors[i];
          //Check if we have been running too long
-        if (m->timeout_value >= m->timeout_setting){
-            m->status = TIMEOUT_ERROR;
-            fprintf(port, "timeout\n");
-            motorControl(m, m->current_dir, 0); //Shutdown motor if it has been running too long.
-            m->set_length = getActuatorLength(m); //REset movement
-            //_delay_ms(100);
-           // return;
-        }            // m->current_position = getMotorPosition(m); 
-        else{
-            m->current_length = getActuatorLength(m);
-            if (m->current_length > m->set_length + m->length_hysteresis){
-                motorControl(m, BACKWARD, m->max_pwm);
-                m->timeout_value ++; //update timeout variables
-                m->status = RUNNING_BACKWARD;
-            }
-            else if (m->current_length < m->set_length - m->length_hysteresis){
-                motorControl(m, FORWARD, m->max_pwm);
-                m->timeout_value ++; //update timeout variables
-                m->status = RUNNING_FORWARD;
-            }
+        if (running_motor == i || running_motor == -1){ //IF this motor is running or none of them is running 
+            if (m->timeout_value >= m->timeout_setting){
+                m->status = TIMEOUT_ERROR;
+                fprintf(port, "timeout\n");
+                motorControl(m, m->current_dir, SHUTDOWN); //Shutdown motor if it has been running too long.
+                m->set_length = getActuatorLength(m); //REset movement
+                running_motor = -1;
+            }            // m->current_position = getMotorPosition(m); 
             else{
-                for(; m->current_pwm > 0; m->current_pwm--){
-                    setMotor(m, m->current_dir, m->current_pwm);
-                    delayLoop_us(m->deacceleration_time);
+                m->current_length = getActuatorLength(m);
+                if (m->current_length > m->set_length + m->length_hysteresis){
+                    motorControl(m, BACKWARD, m->max_pwm);
+                    m->timeout_value ++; //update timeout variables
+                    m->status = RUNNING_BACKWARD;
+                    running_motor = i;
                 }
-                //setMotor(m, m->current_dir, 0);
-                m->timeout_value = 0; //Clear timeout
-                m->status = STATUS_OK;
-                disableMotorPWM(m);       
-                _delay_ms(50);           
+                else if (m->current_length < m->set_length - m->length_hysteresis){
+                    motorControl(m, FORWARD, m->max_pwm);
+                    m->timeout_value ++; //update timeout variables
+                    m->status = RUNNING_FORWARD;
+                    running_motor = i;
+                }
+                else{
+                    for(; m->current_pwm > 0; m->current_pwm--){
+                        setMotor(m, m->current_dir, m->current_pwm);
+                        delayLoop_us(m->deacceleration_time);
+                    }
+                    //fprintf(port,"Tval:%ld\n",m->timeout_value);
+                    m->timeout_value = 0; //Clear timeout
+                    m->status = STATUS_OK;
+                    disableMotorPWM(m);       
+                    _delay_ms(50);       
+                    running_motor = -1;    
+               }
             }
         }
         status += m->status; //Collect status from all motors

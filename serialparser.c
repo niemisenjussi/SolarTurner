@@ -208,17 +208,20 @@ void parseCommands(void){
             else if (value == '7'){
                 fprintf(port, "G7:%5.2f:%5.2f:%5.2f:%5.2f\n",getAngleMotorMinAngle(), getTiltMotorMinAngle(), getAngleMotorMaxAngle(), getTiltMotorMaxAngle());
             }
+            else if (value == '8'){
+                 fprintf(port, "G8:%d:%d\n",getAngleActuatorSetLength(), getTiltActuatorSetLength());
+            }
             else{
                 printerr();
             }
             read_until_line_end();
         }
         else if (command == 'F'){
-            forceMotors(FORWARD,30);
+            //forceMotors(FORWARD,30);
             read_until_line_end();
         }
-        else if (command == 'B'){
-            forceMotors(BACKWARD,30);
+        else if (command == 'D'){
+            //forceMotors(BACKWARD,30);
             read_until_line_end();
         }
         else if (command == 'A'){ //ADC read voltage, commands A0\n  A1\n ,A2\n ,A3\n ,A4\n and so on are possible
@@ -234,6 +237,26 @@ void parseCommands(void){
                 fprintf(port,"A");
                 for (uint8_t i=0; i<8; i++){
                     fprintf(port, "%d:%d:", i, GetVoltage(i, 0x40));
+                }
+                fprintf(port,"\n");
+            }
+            else{
+                printerr();
+            }
+            read_until_line_end();
+        }
+        else if (command == 'B'){ //ADC read voltage, commands A0\n  A1\n ,A2\n ,A3\n ,A4
+            char buff[2];
+            clearBuffer(buff, 2);
+            buff[0] = buffer[ring_read];
+            uint8_t channel = atoi(buff);
+            if (channel < 8){
+                fprintf(port, "B%d:%ld\n", channel, GetOverSampledVoltage(channel, 0x40));
+            }
+            else if (channel == 8){
+                fprintf(port,"B");
+                for (uint8_t i=0; i<8; i++){
+                    fprintf(port, "%d:%ld:", i, GetOverSampledVoltage(i, 0x40));
                 }
                 fprintf(port,"\n");
             }

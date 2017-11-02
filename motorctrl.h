@@ -83,8 +83,8 @@ typedef struct{
     float actuator_range;
     uint16_t actuator_min_limit;
     uint16_t actuator_max_limit;
-    uint16_t timeout_setting;
-    uint16_t timeout_value;
+    uint32_t timeout_setting;
+    uint32_t timeout_value;
     volatile motor_status status;
     float (*angle_correction)(uint16_t f);
     uint16_t voltage_low_offset;
@@ -118,9 +118,11 @@ float getMotorMinAngle(volatile motor *m);
 float getMotorMaxAngle(volatile motor *m);
 
 
+uint16_t getTiltActuatorSetLength(void);
+uint16_t getAngleActuatorSetLength(void);
 uint8_t setTiltMotorLength(uint16_t length);
 uint8_t setAngleMotorLength(uint16_t length);
-void setLengthLoop(void);
+uint8_t setLengthLoop(void);
 
 void forceMotors(uint8_t dir, uint8_t time);
 void calibrateMotors(void);
