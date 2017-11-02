@@ -71,7 +71,7 @@ int main (int argc, char *argv[])
 
     uint8_t current_mode = readAutoManualState();
     while(1){
-       // uint8_t status = motorController();
+       // uint8_t status = setLengthLoop();
         setLengthLoop();
 
 //        if (status > STATUS_OK){
@@ -83,13 +83,13 @@ int main (int argc, char *argv[])
                 case 1:{
                     setAngle(getSetAngle()+2);
                     fprintf(&port,"Turning 2 degrees left\n");
-                    while(readTiltButtonState() != 0){motorController();} //Wait until button is released
+                    while(readTiltButtonState() != 0){setLengthLoop();} //Wait until button is released
                     break;
                 }
                 case 2:{
                     setAngle(getSetAngle()-2);
                     fprintf(&port,"Turning 2 degrees right\n");
-                    while(readTiltButtonState() != 0){motorController();} //Wait until button is released
+                    while(readTiltButtonState() != 0){setLengthLoop();} //Wait until button is released
                     break;
                 }
             }
@@ -97,13 +97,13 @@ int main (int argc, char *argv[])
                 case 1:{
                     setTilt(getSetTilt()+2);
                     fprintf(&port,"Turning 2 degree UP\n");
-                    while(readTurnButtonState() != 0){motorController();} //Wait until button is released
+                    while(readTurnButtonState() != 0){setLengthLoop();} //Wait until button is released
                     break;
                 }
                 case 2:{
                     setTilt(getSetTilt()-2);
                     fprintf(&port,"Turning 2 degrees DOWN\n");
-                    while(readTurnButtonState() != 0){motorController();} //Wait until button is released
+                    while(readTurnButtonState() != 0){setLengthLoop();} //Wait until button is released
                     break;
                 }
             }

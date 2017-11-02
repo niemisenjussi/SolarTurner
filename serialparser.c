@@ -205,6 +205,9 @@ void parseCommands(void){
             else if (value == '6'){
                 fprintf(port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTurnButtonState());
             }
+            else if (value == '7'){
+                fprintf(port, "G7:%5.2f:%5.2f:%5.2f:%5.2f\n",getAngleMotorMinAngle(), getTiltMotorMinAngle(), getAngleMotorMaxAngle(), getTiltMotorMaxAngle());
+            }
             else{
                 printerr();
             }

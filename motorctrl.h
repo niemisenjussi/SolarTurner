@@ -53,26 +53,26 @@ typedef struct{
     //Actuator connections
     uint8_t actuator_adc_channel; //potentiometer ADC chanel
     uint8_t actuator_current_adc_channel; // Channel which measures current consumption
-    volatile uint8_t *actuator_1_port_addr; //Pins where actuator potentiometer is connected
-    volatile uint8_t *actuator_1_dir_addr;
-    uint8_t actuator_1_pin;
-    volatile uint8_t *actuator_2_dir_addr;
-    volatile uint8_t *actuator_2_port_addr; //another end of potentiometer
-    uint8_t actuator_2_pin;
+    //volatile uint8_t *actuator_1_port_addr; //Pins where actuator potentiometer is connected
+    //volatile uint8_t *actuator_1_dir_addr;
+    //uint8_t actuator_1_pin;
+    //volatile uint8_t *actuator_2_dir_addr;
+    //volatile uint8_t *actuator_2_port_addr; //another end of potentiometer
+    //uint8_t actuator_2_pin;
     
 
     //PWM and movement parameters
     volatile uint8_t current_pwm;
     volatile uint8_t current_dir;
-    volatile float current_position;
-    volatile float set_position;
+   // volatile float current_position;
+    //volatile float set_position;
     volatile uint16_t current_length;
     volatile uint16_t set_length;
     uint8_t acceleration_step;
     uint8_t deacceleration_step;
     uint16_t acceleration_time;
     uint16_t deacceleration_time;
-    float angle_hysteresis;
+    //:float angle_hysteresis;
     uint8_t length_hysteresis;
     uint8_t max_pwm;
     float min_angle;
@@ -110,6 +110,14 @@ motor_status getTiltMotorStatus(void);
 motor_status motorController(void);
 void shutdownMotors(void);
 
+float getTiltMotorMinAngle(void);
+float getAngleMotorMinAngle(void);
+float getTiltMotorMaxAngle(void);
+float getAngleMotorMaxAngle(void);
+float getMotorMinAngle(volatile motor *m);
+float getMotorMaxAngle(volatile motor *m);
+
+
 uint8_t setTiltMotorLength(uint16_t length);
 uint8_t setAngleMotorLength(uint16_t length);
 void setLengthLoop(void);
@@ -118,12 +126,11 @@ void forceMotors(uint8_t dir, uint8_t time);
 void calibrateMotors(void);
 
 //private functions which are called only inside
+void motorControl(volatile motor *m, uint8_t dir, uint8_t pwm);
 float getMotorPosition(volatile motor *m); //returns motor final angle in degrees
 uint16_t getActuatorLength(volatile motor *m); //Returns actuator length (body+actuated distance)
 uint8_t setMotorPosition(volatile motor *m, float angle); //sets motor new angle
 float getMotorSetPosition(volatile motor *m);
-void motorControlLoop(volatile motor *m);
-void motorControl(volatile motor *m, uint8_t dir, uint8_t pwm);
 void disableMotorPWM(volatile motor *m);
 void setMotor(volatile motor *m, uint8_t dir, uint8_t pwm);
 void delayLoop_us(uint16_t delay); 
