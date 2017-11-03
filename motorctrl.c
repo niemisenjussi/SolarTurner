@@ -8,7 +8,7 @@
 #define OC2A 0x80
 #define OC2B 0x20
 
-#define CALIBRATION_HYSTERESIS 2
+#define CALIBRATION_HYSTERESIS 2 //in millimeters
 
 #define SHUTDOWN 0 //shutdown motor
 #define ANGLE_MAX_PWM 0xFF //Angle motor
@@ -16,7 +16,8 @@
 #define PRESCALER 0x02 //PWM frequency divider
 #define NUMOFSAMPLES 4 //ADC averaging sample count
 
-#define LENGTH_HYSTERESIS 5 //in millimeters
+#define TILT_HYSTERESIS_MM 2 
+#define ANGLE_HYSTERESIS_MM 4 //in millimeters
 #define MOTOR_ACCELERATION 500 //wait time in micro seconds between speed increase
 #define MOTOR_ACC_STEP 1 //8bit PWM step per acceleration.
 
@@ -29,8 +30,8 @@
 #define ANGLE_REFERENCE 180.0 //heading by default South
 #define TILT_REFERENCE 0.0   //Tilted 5 degrees upward frow vertical angle
 
-#define ANGLE_MOTOR_TIMEOUT 100000L // in milliseconds
-#define TILT_MOTOR_TIMEOUT 50000L  // in milliseconds
+#define ANGLE_MOTOR_TIMEOUT 100000L // TODO refactor timeout mechanism
+#define TILT_MOTOR_TIMEOUT 50000L  //
 
 //Angle correction factors, all values are millimeters
 #define ANGLE_X 700L //Distance from center to actuator lower point
@@ -109,7 +110,7 @@ volatile motor motors[] = {
          MOTOR_ACC_STEP,     //Deacceleration step
          MOTOR_ACCELERATION, //Acceleration time
          MOTOR_ACCELERATION, //deacceleration time
-         LENGTH_HYSTERESIS,
+         ANGLE_HYSTERESIS_MM,
          ANGLE_MAX_PWM,      //MAX pwm value for anglular movements
          MIN_ANGLE,          //Minimun allowed angle
          ANGLE_RANGE,        //0-100 mapping to angle values
@@ -145,7 +146,7 @@ volatile motor motors[] = {
          MOTOR_ACC_STEP,     //Deacceleration step
          MOTOR_ACCELERATION, //Acceleration time
          MOTOR_ACCELERATION, //deacceleration time
-         LENGTH_HYSTERESIS,
+         TILT_HYSTERESIS_MM,
          TILT_MAX_PWM,      //MAX pwm value for anglular movements
          MIN_TILT,          //Minimun allowed angle
          TILT_RANGE,        //0-100 mapping to angle values
@@ -308,9 +309,17 @@ uint8_t setMotorPosition(volatile motor *m, float angle){
         m->set_length = m->angle_to_length(angle - m->angle_reference);
         return 0;
     }
-    else{
-        return 1;
+
+    //angle is bigger than allowed => use max angle
+    if (angle > (m->min_angle + m->angle_range)){
+        m->set_length = m->angle_to_length((m->min_angle+m->angle_range) - m->angle_reference); 
     }
+    //angle is smaller than allowed => use minimum angle
+    else if (angle < m->min_angle){
+        m->set_length = m->angle_to_length(m->min_angle - m->angle_reference); 
+    }
+    m->timeout_value = 0;
+    return 1;
 }   
 
 /*

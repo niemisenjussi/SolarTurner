@@ -85,8 +85,8 @@ double readFloat(uint8_t start, uint8_t stop){
            i = 10;
         }
     }
-    printf(buf);
-    printf("\n");
+   // printf(buf);
+   // printf("\n");
     return atof(buf);
 }
 
