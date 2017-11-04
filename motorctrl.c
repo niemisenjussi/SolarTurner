@@ -11,12 +11,13 @@
 #define CALIBRATION_HYSTERESIS 2 //in millimeters
 
 #define SHUTDOWN 0 //shutdown motor
-#define ANGLE_MAX_PWM 0xFF //Angle motor
-#define TILT_MAX_PWM 0xFF //Tilt MOTOR
+#define ANGLE_MAX_PWM 0xEF //Angle motor
+#define TILT_MAX_PWM 0xEF //Tilt MOTOR
 #define PRESCALER 0x02 //PWM frequency divider
 #define NUMOFSAMPLES 4 //ADC averaging sample count
 
-#define TILT_HYSTERESIS_MM 2 
+#define SET_HYSTERESIS_MM 2 
+#define TILT_HYSTERESIS_MM 3 
 #define ANGLE_HYSTERESIS_MM 4 //in millimeters
 #define MOTOR_ACCELERATION 500 //wait time in micro seconds between speed increase
 #define MOTOR_ACC_STEP 1 //8bit PWM step per acceleration.
@@ -24,7 +25,7 @@
 //SET limits for the API
 #define MIN_ANGLE 100.0
 #define ANGLE_RANGE 150.0
-#define MIN_TILT 10.0
+#define MIN_TILT 12.0
 #define TILT_RANGE 70.0
 
 #define ANGLE_REFERENCE 180.0 //heading by default South
@@ -302,11 +303,25 @@ uint8_t setTilt(float tilt){
     return setMotorPosition(&motors[TILT_MOTOR], tilt);
 }
 
+/*
+    Private function which sets a new position to given motor.
+    Motor min/max angles are checked and min,max values are used
+    if new angle is lower or higher
+*/
 uint8_t setMotorPosition(volatile motor *m, float angle){
+    m->status = WAITING;
     //vefify that angle is in between valid range
     if (angle >= m->min_angle && angle <= (m->min_angle + m->angle_range)){
         m->timeout_value = 0; //Clear timeout value on every angle change
-        m->set_length = m->angle_to_length(angle - m->angle_reference);
+        uint16_t len = m->angle_to_length(angle - m->angle_reference);
+        
+        //fix hysteresis offset
+        if (len > m->set_length){ //Setting bigger angle
+            m->set_length = len + (m->length_hysteresis/2);
+        }
+        else{ //Setting lower angle
+            m->set_length = len - (m->length_hysteresis/2);
+        }
         return 0;
     }
 
@@ -356,24 +371,23 @@ motor_status getTiltMotorStatus(void){
 void shutdownMotors(void){
     for (uint8_t i = 0; i<NUM_OF_MOTORS; i++){
         disableMotorPWM(&motors[i]);
-       // motors[i].current_position = getMotorPosition(&motors[i]);
         motors[i].set_length = motors[i].current_length;
     }
 }
 
 
 uint8_t setTiltMotorLength(uint16_t length){
-    if (length >= TILT_ACTUATOR_MIN_LIMIT && length <= TILT_ACTUATOR_MAX_LIMIT){
-        motors[TILT_MOTOR].set_length = length;
-        return 0;
-    }
-    else{
-        return 1;
-    }
+    return setMotorLength(&motors[TILT_MOTOR], length);
 }
+
 uint8_t setAngleMotorLength(uint16_t length){
-    if (length >= ANGLE_ACTUATOR_MIN_LIMIT && length <= ANGLE_ACTUATOR_MAX_LIMIT){
-        motors[ANGLE_MOTOR].set_length = length;
+    return setMotorLength(&motors[ANGLE_MOTOR], length);
+}
+
+uint8_t setMotorLength(volatile motor *m, uint16_t length){
+    if (length >= m->actuator_min_limit && length <= m->actuator_max_limit){
+        m->set_length = length;
+        m->status = WAITING;
         return 0;
     }
     else{
@@ -381,21 +395,23 @@ uint8_t setAngleMotorLength(uint16_t length){
     }
 }
 
-uint8_t setLengthLoop(void){
-    uint8_t status = 0;
+
+void setLengthLoop(void){
+    //uint8_t status = 0;
     for (uint8_t i = 0; i < NUM_OF_MOTORS; i++){
         volatile motor *m = &motors[i];
-         //Check if we have been running too long
-        if (running_motor == i || running_motor == -1){ //IF this motor is running or none of them is running 
+        m->current_length = getActuatorLength(m);
+
+        //Check if we have been running too long
+        if ((running_motor == i || running_motor == -1) && (m->status != STATUS_OK)){ //IF this motor is running or none of them is running 
             if (m->timeout_value >= m->timeout_setting){
+                motorControl(m, m->current_dir, SHUTDOWN); //Shutdown motor if it has been running too lon.
                 m->status = TIMEOUT_ERROR;
                 fprintf(port, "timeout\n");
-                motorControl(m, m->current_dir, SHUTDOWN); //Shutdown motor if it has been running too long.
-                m->set_length = getActuatorLength(m); //REset movement
+                m->set_length = m->current_length; //REset movement
                 running_motor = -1;
-            }            // m->current_position = getMotorPosition(m); 
+            } 
             else{
-                m->current_length = getActuatorLength(m);
                 if (m->current_length > m->set_length + m->length_hysteresis){
                     motorControl(m, BACKWARD, m->max_pwm);
                     m->timeout_value ++; //update timeout variables
@@ -417,14 +433,14 @@ uint8_t setLengthLoop(void){
                     m->timeout_value = 0; //Clear timeout
                     m->status = STATUS_OK;
                     disableMotorPWM(m);       
-                    _delay_ms(50);       
+                    _delay_ms(10);       
                     running_motor = -1;    
-               }
+                }
             }
         }
-        status += m->status; //Collect status from all motors
+       // status += m->status; //Collect status from all motors
     }
-    return status;
+    //return status;
 }
 
 void forceMotors(uint8_t dir, uint8_t time){

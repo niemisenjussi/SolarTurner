@@ -177,7 +177,7 @@ void parseCommands(void){
             }
             else if (buffer[ring_read] == '3'){
                 if (readAutoManualState() == AUTO){ 
-                    calibrateMotors();
+                    //calibrateMotors();
                 }
             }
             else{

@@ -21,7 +21,8 @@ typedef enum {
     RUNNING_BACKWARD = 2,
     TIMEOUT_ERROR = 3,
     MIN_LIMIT = 4,
-    MAX_LIMIT = 5
+    MAX_LIMIT = 5,
+    WAITING = 6
 } motor_status;
 
 typedef struct{
@@ -122,12 +123,13 @@ uint16_t getTiltActuatorSetLength(void);
 uint16_t getAngleActuatorSetLength(void);
 uint8_t setTiltMotorLength(uint16_t length);
 uint8_t setAngleMotorLength(uint16_t length);
-uint8_t setLengthLoop(void);
+void setLengthLoop(void);
 
 void forceMotors(uint8_t dir, uint8_t time);
 void calibrateMotors(void);
 
 //private functions which are called only inside
+uint8_t setMotorLength(volatile motor *m, uint16_t length);
 void motorControl(volatile motor *m, uint8_t dir, uint8_t pwm);
 float getMotorPosition(volatile motor *m); //returns motor final angle in degrees
 uint16_t getActuatorLength(volatile motor *m); //Returns actuator length (body+actuated distance)
