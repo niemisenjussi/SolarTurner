@@ -42,7 +42,7 @@ void initLED(void){
 }
 int main (int argc, char *argv[])
 {
-    _delay_ms(50);
+    _delay_ms(500);
 	USART_Init(&port, 115200);
 	USART0_Flush();
     initLED();
@@ -53,56 +53,43 @@ int main (int argc, char *argv[])
 
     initSystemTimer(); //Starts all timers which are used => GTCCR = 0x00;
     
-//     for (uint16_t i = 340; i < 540; i+=10){
-//         float angle = tiltConversion(i);
-//         uint16_t l = tiltDegToLength(angle);
-//         fprintf(&port, "tilt:%5.2f f:%d len:%d\n", angle, i, l);
-//     }
-// 
-//     for (uint16_t i = 515; i < 890; i+=10){
-//         float angle = angleConversion(i);
-//         uint16_t l = angleDegToLength(angle);
-//         fprintf(&port, "angle:%5.2f f:%d len:%d\n",angle, i, l);
-//     }
-//     while(1){}
-// 
     GTCCR = 0x00;
     sei();
 
     uint8_t current_mode = readAutoManualState();
+    fprintf(&port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTurnButtonState());
     while(1){
-       // uint8_t status = setLengthLoop();
         setLengthLoop();
-
-//        if (status > STATUS_OK){
-                //sendError();
-//        }
-
+        
         if (readAutoManualState() == MANUAL){ 
             switch(readTiltButtonState()){
                 case 1:{
-                    setAngle(getSetAngle()+2);
-                    fprintf(&port,"Turning 2 degrees left\n");
+                    fprintf(&port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTurnButtonState());
+                    setAngleMotorLength(getAngleActuatorSetLength()+5);
+                    //setAngle(getSetAngle()+2);
                     while(readTiltButtonState() != 0){setLengthLoop();} //Wait until button is released
                     break;
                 }
                 case 2:{
-                    setAngle(getSetAngle()-2);
-                    fprintf(&port,"Turning 2 degrees right\n");
+                    fprintf(&port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTurnButtonState());
+                    setAngleMotorLength(getAngleActuatorSetLength()-5);
+                    //tAngle(getSetAngle()-2);
                     while(readTiltButtonState() != 0){setLengthLoop();} //Wait until button is released
                     break;
                 }
             }
             switch(readTurnButtonState()){
                 case 1:{
-                    setTilt(getSetTilt()+2);
-                    fprintf(&port,"Turning 2 degree UP\n");
+                    fprintf(&port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTurnButtonState());
+                    setTiltMotorLength(getTiltActuatorSetLength()+5);
+                    //setTilt(getSetTilt()+2);
                     while(readTurnButtonState() != 0){setLengthLoop();} //Wait until button is released
                     break;
                 }
                 case 2:{
-                    setTilt(getSetTilt()-2);
-                    fprintf(&port,"Turning 2 degrees DOWN\n");
+                    fprintf(&port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTurnButtonState());
+                    setTiltMotorLength(getTiltActuatorSetLength()-5);
+                    //setTilt(getSetTilt()-2);
                     while(readTurnButtonState() != 0){setLengthLoop();} //Wait until button is released
                     break;
                 }
@@ -113,12 +100,13 @@ int main (int argc, char *argv[])
         }
 
         if (current_mode != readAutoManualState()){
+            fprintf(&port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTurnButtonState());
             if (readAutoManualState() == 1){
-                fprintf(&port, "Automatic mode turned ON\n");
+               // fprintf(&port, "Automatic mode turned ON\n");
                 current_mode = 1;
             }
             else{
-                fprintf(&port, "Manual mode Activated\n");
+               // fprintf(&port, "Manual mode Activated\n");
                 current_mode = 0;
                 shutdownMotors();
             }

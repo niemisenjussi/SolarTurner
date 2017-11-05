@@ -8,11 +8,13 @@
 #define OC2A 0x80
 #define OC2B 0x20
 
+#define DEG2RAD  M_PI / 180.0
+
 #define CALIBRATION_HYSTERESIS 2 //in millimeters
 
 #define SHUTDOWN 0 //shutdown motor
 #define ANGLE_MAX_PWM 0xEF //Angle motor
-#define TILT_MAX_PWM 0xEF //Tilt MOTOR
+#define TILT_MAX_PWM 0xFF //Tilt MOTOR
 #define PRESCALER 0x02 //PWM frequency divider
 #define NUMOFSAMPLES 4 //ADC averaging sample count
 
@@ -23,16 +25,16 @@
 #define MOTOR_ACC_STEP 1 //8bit PWM step per acceleration.
 
 //SET limits for the API
-#define MIN_ANGLE 100.0
-#define ANGLE_RANGE 150.0
-#define MIN_TILT 12.0
-#define TILT_RANGE 70.0
+#define MIN_ANGLE 105.0
+#define ANGLE_RANGE 120.0
+#define MIN_TILT 30.0
+#define TILT_RANGE 40.0
 
-#define ANGLE_REFERENCE 180.0 //heading by default South
+#define ANGLE_REFERENCE 165.0 //heading by default South
 #define TILT_REFERENCE 0.0   //Tilted 5 degrees upward frow vertical angle
 
-#define ANGLE_MOTOR_TIMEOUT 100000L // TODO refactor timeout mechanism
-#define TILT_MOTOR_TIMEOUT 50000L  //
+#define ANGLE_MOTOR_TIMEOUT 60000L // TODO refactor timeout mechanism
+#define TILT_MOTOR_TIMEOUT 40000L  //
 
 //Angle correction factors, all values are millimeters
 #define ANGLE_X 700L //Distance from center to actuator lower point
@@ -46,19 +48,20 @@
 //Define Actuator physical measurements
 #define ACTUATOR_A_MIN_LENGTH 515L //absolute value
 #define ACTUATOR_A_MAX_LENGTH 890L //absolute value
-#define ACTUATOR_A_MIN_LIMIT  520L//Minimum limit where actuator can go
-#define ACTUATOR_A_MAX_LIMIT  880L //Maximum limit where actuator can go
+#define ACTUATOR_A_MIN_LIMIT  540L//Minimum limit where actuator can go
+#define ACTUATOR_A_MAX_LIMIT  860L //Maximum limit where actuator can go
 
 #define ACTUATOR_B_MIN_LENGTH 340L  //375 515-890               //pidempi
 #define ACTUATOR_B_MAX_LENGTH 540L  //200 340-540 pisimmällään  //lyhyempi
-#define ACTUATOR_B_MIN_LIMIT  350L
-#define ACTUATOR_B_MAX_LIMIT  530L
+#define ACTUATOR_B_MIN_LIMIT  380L
+#define ACTUATOR_B_MAX_LIMIT  485L
 
 #define VREF 4.7 //Reference voltage which is used for actuators
 #define ACTUATOR_A_LOW_OFFSET 0.93
 #define ACTUATOR_A_HIGH_OFFSET 3.75
 #define ACTUATOR_B_LOW_OFFSET 1.57
 #define ACTUATOR_B_HIGH_OFFSET 3.11
+#define ADC_BITS 1024 //16384L
 
 #define MOTOR_A 0
 #define MOTOR_B 1
@@ -125,9 +128,9 @@ volatile motor motors[] = {
          0,                  //timeout current value starts at zero
          STATUS_OK,
          &angleConversion, //angle correction function pointer
-         (1024*ANGLE_ACTUATOR_LOW_OFFSET)/VREF, //217,87 offset
-         (1024*ANGLE_ACTUATOR_HIGH_OFFSET)/VREF, //806,12
-         ((1024*ANGLE_ACTUATOR_HIGH_OFFSET)/VREF) - ((1024*ANGLE_ACTUATOR_LOW_OFFSET)/VREF),
+         (ADC_BITS*ANGLE_ACTUATOR_LOW_OFFSET)/VREF, //217,87 offset
+         (ADC_BITS*ANGLE_ACTUATOR_HIGH_OFFSET)/VREF, //806,12
+         ((ADC_BITS*ANGLE_ACTUATOR_HIGH_OFFSET)/VREF) - ((ADC_BITS*ANGLE_ACTUATOR_LOW_OFFSET)/VREF),
          &angleDegToLength 
     },
     {
@@ -161,17 +164,14 @@ volatile motor motors[] = {
          0,                  //timeout current value starts at zero
          STATUS_OK,
          &tiltConversion, //angle correction function pointer
-         (1024*TILT_ACTUATOR_LOW_OFFSET)/VREF, //348,6
-         (1024*TILT_ACTUATOR_HIGH_OFFSET)/VREF, //668,9
-         ((1024*TILT_ACTUATOR_HIGH_OFFSET)/VREF) - ((1024*TILT_ACTUATOR_LOW_OFFSET)/VREF),
+         (ADC_BITS*TILT_ACTUATOR_LOW_OFFSET)/VREF, //348,6
+         (ADC_BITS*TILT_ACTUATOR_HIGH_OFFSET)/VREF, //668,9
+         ((ADC_BITS*TILT_ACTUATOR_HIGH_OFFSET)/VREF) - ((ADC_BITS*TILT_ACTUATOR_LOW_OFFSET)/VREF),
          &tiltDegToLength
     }};
 
 volatile int8_t running_motor = -1;
 FILE *port;
-//Initialize MOTOR A, Angle motor
-//volatile motor motors[NUM_OF_MOTORS];
-//extern motor motors[NUM_OF_MOTORS];
 
 //returns motor final calculated position in degrees
 float getMotorPosition(volatile motor *m){
@@ -222,6 +222,7 @@ float getMotorMaxAngle(volatile motor *m){
 //returns motor actuator length in millimeters
 uint16_t getActuatorLength(volatile motor *m){
     uint32_t voltage = AVGVoltage(m->actuator_adc_channel, 0x40, NUMOFSAMPLES);
+    //uint32_t voltage = GetOverSampledVoltage(m->actuator_adc_channel, 0x40);
     voltage = (voltage - m->voltage_low_offset); //Fix minimum position starting at zero
     uint16_t length =  m->actuator_min_length + (m->actuator_range / m->voltage_range * voltage); //volts per degree
     
@@ -268,7 +269,6 @@ float tiltConversion(uint16_t f){
               (TILT_C*TILT_C + 2L*TILT_C*f + pow(f,2.0)- TILT_X*TILT_X - TILT_Y*TILT_Y)))/
               (TILT_C*TILT_C + 2L*TILT_C*TILT_Y - pow(f,2.0) + TILT_X*TILT_X + TILT_Y*TILT_Y)))/M_PI;
 }
-#define DEG2RAD  M_PI / 180.0
 
 uint16_t angleDegToLength(float angle){
     float alfa = (angle+180)*DEG2RAD;
@@ -314,13 +314,13 @@ uint8_t setMotorPosition(volatile motor *m, float angle){
     if (angle >= m->min_angle && angle <= (m->min_angle + m->angle_range)){
         m->timeout_value = 0; //Clear timeout value on every angle change
         uint16_t len = m->angle_to_length(angle - m->angle_reference);
-        
+    
         //fix hysteresis offset
         if (len > m->set_length){ //Setting bigger angle
-            m->set_length = len + (m->length_hysteresis/2);
+            m->set_length = len + (m->length_hysteresis);
         }
         else{ //Setting lower angle
-            m->set_length = len - (m->length_hysteresis/2);
+            m->set_length = len - (m->length_hysteresis);
         }
         return 0;
     }
