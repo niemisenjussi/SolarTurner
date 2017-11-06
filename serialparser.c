@@ -117,7 +117,7 @@ uint8_t findParameter(char startchar, char stopchar, char secondstopchar, uint8_
 }
 
 void printerr(void){
-    fprintf(port, "ERR\n");
+    fprintf_P(port, PSTR("ERR\n"));
 }
 
 void parseCommands(void){
@@ -136,7 +136,7 @@ void parseCommands(void){
                         if (succ == FIND_SUCCESS){
                             uint8_t tsuccess = setTilt(readFloat(start, stop));
                             if (asuccess == 0 && tsuccess == 0){
-                                fprintf(port,"OK\n");
+                                fprintf_P(port, PSTR("OK\n"));
                             }
                             else{
                                 printerr(); 
@@ -151,7 +151,7 @@ void parseCommands(void){
                     }
                 }
                 else{
-                    fprintf(port, "MAN\n");
+                    fprintf_P(port, PSTR("MAN\n"));
                 }
             }
             else if (buffer[ring_read] == '2'){
@@ -163,7 +163,7 @@ void parseCommands(void){
                         if (succ == FIND_SUCCESS){
                             uint8_t tsuccess = setTiltMotorLength(readInt16(start, stop));
                             if (asuccess == 0 && tsuccess == 0){
-                                fprintf(port,"OK\n");
+                                fprintf_P(port, PSTR("OK\n"));
                             }
                             else{
                                 printerr();
@@ -172,7 +172,7 @@ void parseCommands(void){
                     }
                 }
                 else{
-                    fprintf(port, "MAN\n");
+                    fprintf_P(port, PSTR("MAN\n"));
                 }
             }
             else if (buffer[ring_read] == '3'){

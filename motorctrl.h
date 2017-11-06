@@ -22,7 +22,8 @@ typedef enum {
     TIMEOUT_ERROR = 3,
     MIN_LIMIT = 4,
     MAX_LIMIT = 5,
-    WAITING = 6
+    WAITING = 6,
+    ACTUATOR_ERROR = 7
 } motor_status;
 
 typedef struct{

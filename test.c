@@ -66,14 +66,12 @@ int main (int argc, char *argv[])
                 case 1:{
                     fprintf(&port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTurnButtonState());
                     setAngleMotorLength(getAngleActuatorSetLength()+5);
-                    //setAngle(getSetAngle()+2);
                     while(readTiltButtonState() != 0){setLengthLoop();} //Wait until button is released
                     break;
                 }
                 case 2:{
                     fprintf(&port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTurnButtonState());
                     setAngleMotorLength(getAngleActuatorSetLength()-5);
-                    //tAngle(getSetAngle()-2);
                     while(readTiltButtonState() != 0){setLengthLoop();} //Wait until button is released
                     break;
                 }
@@ -82,14 +80,12 @@ int main (int argc, char *argv[])
                 case 1:{
                     fprintf(&port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTurnButtonState());
                     setTiltMotorLength(getTiltActuatorSetLength()+5);
-                    //setTilt(getSetTilt()+2);
                     while(readTurnButtonState() != 0){setLengthLoop();} //Wait until button is released
                     break;
                 }
                 case 2:{
                     fprintf(&port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTurnButtonState());
                     setTiltMotorLength(getTiltActuatorSetLength()-5);
-                    //setTilt(getSetTilt()-2);
                     while(readTurnButtonState() != 0){setLengthLoop();} //Wait until button is released
                     break;
                 }
