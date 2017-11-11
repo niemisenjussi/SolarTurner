@@ -209,7 +209,16 @@ void parseCommands(void){
                 fprintf(port, "G7:%5.2f:%5.2f:%5.2f:%5.2f\n",getAngleMotorMinAngle(), getTiltMotorMinAngle(), getAngleMotorMaxAngle(), getTiltMotorMaxAngle());
             }
             else if (value == '8'){
-                 fprintf(port, "G8:%d:%d\n",getAngleActuatorSetLength(), getTiltActuatorSetLength());
+                fprintf(port, "G8:%d:%d\n",getAngleActuatorSetLength(), getTiltActuatorSetLength());
+            }
+            else if (value == '9'){
+                fprintf(port, "G9:%d:%d\n", getAngleMotorAVGcurrent(), getTiltMotorAVGcurrent());
+            }
+            else if (value == 'A'){
+                fprintf(port, "GA:%5.2f:%5.2f\n", getAngleMotorMoveSpeed(), getTiltMotorMoveSpeed());
+            }
+            else if (value == 'B'){
+                fprintf(port, "GB:%d:%d\n", getAngleMoveLength(), getTiltMoveLength());
             }
             else{
                 printerr();

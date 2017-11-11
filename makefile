@@ -205,7 +205,7 @@ LDFLAGS += $(PRINTF_LIB) $(SCANF_LIB) $(MATH_LIB)
 AVRDUDE_PROGRAMMER = arduino #skt500v1 #avrispmkII #atmelice_isp #avrispmkII 
 
 # com1 = serial port. Use lpt1 to connect to parallel port.
-AVRDUDE_PORT = /dev/ttyUSB0 #usb    # programmer connected to serial device
+AVRDUDE_PORT = /dev/ttyUSB1 #usb    # programmer connected to serial device
 AVRDUDE_SPEED = 57600
 
 #avrdude -v -p atmega328p -c arduino -P /dev/ttyUSB0 -b 57600 -D -U flash:w:test.hex:i

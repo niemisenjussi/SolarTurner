@@ -13,7 +13,7 @@
 #define CALIBRATION_HYSTERESIS 2 //in millimeters
 
 #define SHUTDOWN 0 //shutdown motor
-#define ANGLE_MAX_PWM 0xEF //Angle motor
+#define ANGLE_MAX_PWM 0x9A //Angle motor
 #define TILT_MAX_PWM 0xFF //Tilt MOTOR
 #define PRESCALER 0x02 //PWM frequency divider
 #define NUMOFSAMPLES 4 //ADC averaging sample count
@@ -27,7 +27,7 @@
 //SET limits for the API
 #define MIN_ANGLE 105.0
 #define ANGLE_RANGE 120.0
-#define MIN_TILT 8.0
+#define MIN_TILT 8.5
 #define TILT_RANGE 60.0
 
 #define ANGLE_REFERENCE 165.0 //heading by default South
@@ -39,7 +39,7 @@
 //Angle correction factors, all values are millimeters
 #define ANGLE_X 700L //Distance from center to actuator lower point
 #define ANGLE_C 190L //Distance from center to actuator far end
-#define ANGLE_Y 5L  //Offset distance from X to outside
+#define ANGLE_Y 50L  //Offset distance from X to outside
 
 #define TILT_X 505L //Distance from center to actuator lower point
 #define TILT_C 170L //Distance from center to actuator far end
@@ -53,7 +53,7 @@
 
 #define ACTUATOR_B_MIN_LENGTH 340L  //375 515-890               //pidempi
 #define ACTUATOR_B_MAX_LENGTH 540L  //200 340-540 pisimmällään  //lyhyempi
-#define ACTUATOR_B_MIN_LIMIT  377L
+#define ACTUATOR_B_MIN_LIMIT  375L
 #define ACTUATOR_B_MAX_LIMIT  500L
 
 #define VREF 4.7 //Reference voltage which is used for actuators
@@ -69,8 +69,8 @@
 
 #define ACTUATOR_ADC_A 0
 #define ACTUATOR_ADC_B 1
-#define ACTUATOR_CURRENT_ADC_A 6 
-#define ACTUATOR_CURRENT_ADC_B 7
+#define ACTUATOR_CURRENT_ADC_A 7 
+#define ACTUATOR_CURRENT_ADC_B 6
 //Defines which actuator is controlling tilt and which controls angular movements
 
 #define ANGLE_MOTOR MOTOR_A
@@ -128,7 +128,10 @@ volatile motor motors[] = {
          (ADC_BITS*ANGLE_ACTUATOR_LOW_OFFSET)/VREF, //217,87 offset
          (ADC_BITS*ANGLE_ACTUATOR_HIGH_OFFSET)/VREF, //806,12
          ((ADC_BITS*ANGLE_ACTUATOR_HIGH_OFFSET)/VREF) - ((ADC_BITS*ANGLE_ACTUATOR_LOW_OFFSET)/VREF),
-         &angleDegToLength 
+         &angleDegToLength,
+         0, //Motor current
+         0.0, //motor speed
+         0 //move length
     },
     {
          &PORTD, &DDRD, 6, &TCCR0A, (OC0B + FAST_PWM), &TCCR0B, PRESCALER, &OCR0B, //MOTOR A FORWARD
@@ -161,11 +164,22 @@ volatile motor motors[] = {
          (ADC_BITS*TILT_ACTUATOR_LOW_OFFSET)/VREF, //348,6
          (ADC_BITS*TILT_ACTUATOR_HIGH_OFFSET)/VREF, //668,9
          ((ADC_BITS*TILT_ACTUATOR_HIGH_OFFSET)/VREF) - ((ADC_BITS*TILT_ACTUATOR_LOW_OFFSET)/VREF),
-         &tiltDegToLength
+         &tiltDegToLength,
+         0,
+         0.0,
+         0
     }};
 
+volatile uint16_t systick = 0;
 volatile int8_t running_motor = -1;
 FILE *port;
+
+
+//16bit timer interrupt
+ISR(TIMER1_COMPA_vect){
+    systick ++;
+}
+
 
 float getTiltMotorMinAngle(void){
     return getMotorMinAngle(&motors[TILT_MOTOR]);
@@ -245,6 +259,43 @@ motor_status getTiltMotorStatus(void){
     return motors[TILT_MOTOR].status;
 }
 
+uint16_t getTiltMotorAVGcurrent(void){
+    return getMotorAVGcurrent(&motors[TILT_MOTOR]);
+}
+
+uint16_t getAngleMotorAVGcurrent(void){
+    return getMotorAVGcurrent(&motors[ANGLE_MOTOR]);
+}
+
+float getTiltMotorMoveSpeed(void){
+    return getMotorMoveSpeed(&motors[TILT_MOTOR]);
+}
+
+float getAngleMotorMoveSpeed(void){
+    return getMotorMoveSpeed(&motors[ANGLE_MOTOR]);
+}
+
+uint16_t getTiltMoveLength(void){
+    return getMotorMoveLength(&motors[TILT_MOTOR]);
+}
+
+uint16_t getAngleMoveLength(void){
+    return getMotorMoveLength(&motors[ANGLE_MOTOR]);
+}
+
+uint16_t getMotorAVGcurrent(volatile motor *m){
+    return m->avg_move_current;
+}
+
+float getMotorMoveSpeed(volatile motor *m){
+    return m->move_speed_mm;
+}
+
+uint16_t getMotorMoveLength(volatile motor *m){
+    return m->move_length_mm;
+}
+
+
 //returns motor final calculated position in degrees
 float getMotorPosition(volatile motor *m){
     float aoffset = m->angle_correction(m->current_length);
@@ -264,6 +315,12 @@ float getMotorSetPosition(volatile motor *m){
     float aoffset = m->angle_correction(m->set_length);
     return m->angle_reference + aoffset;
 }
+
+void measureActuatorCurrent(volatile motor *m){
+    uint16_t voltage = AVGVoltage(m->actuator_current_adc_channel, 0x40, 2);
+    m->avg_move_current = (m->avg_move_current + voltage) / 2;    
+}
+
 
 //Returns motor actuator length in millimeters
 uint16_t getActuatorLength(volatile motor *m){
@@ -285,17 +342,19 @@ uint16_t getActuatorLength(volatile motor *m){
     uint16_t length =  m->actuator_min_length + (m->actuator_range / m->voltage_range * voltage); //volts per degree
     
     //Shutdown if we cross virtual limit
-    if (length >= m->actuator_max_limit){
+    if (length > m->actuator_max_limit && m->status == RUNNING_FORWARD){
         m->status = MAX_LIMIT;
         motorControl(m, m->current_dir, SHUTDOWN); //SHUTDOWN motor
         running_motor = -1;
         m->set_length = length;
+       // fprintf_P(port, PSTR("MAXLERR\n"));
     }
-    else if(length <= m->actuator_min_limit){
+    else if(length < m->actuator_min_limit && m->status == RUNNING_BACKWARD){
         m->status = MIN_LIMIT;
         motorControl(m, m->current_dir, SHUTDOWN);  //SHUTDOWN motor
         running_motor = -1;
         m->set_length = length;
+       // fprintf_P(port, PSTR("MINLERR\n"));
     }
     return length;
 }
@@ -338,25 +397,57 @@ uint8_t setMotorPosition(volatile motor *m, float angle){
     
         //fix hysteresis offset
         if (len > m->set_length){ //Setting bigger angle
-            m->set_length = len + (m->length_hysteresis);
+            uint16_t newlen = len + (m->length_hysteresis);
+            if (newlen > m->actuator_max_limit){
+                newlen = m->actuator_max_limit-1;
+            }
+            m->set_length = newlen;
         }
         else{ //Setting lower angle
-            m->set_length = len - (m->length_hysteresis);
+            uint16_t newlen = len - (m->length_hysteresis);
+            if (newlen < m->actuator_min_limit){
+                newlen = m->actuator_min_limit+1;
+            }
+            m->set_length = newlen;
         }
+
+        calculateMoveLength(m);  
+            
         return 0;
     }
 
     //angle is bigger than allowed => use max angle
     if (angle > (m->min_angle + m->angle_range)){
-        m->set_length = m->angle_to_length((m->min_angle+m->angle_range) - m->angle_reference); 
+        uint16_t newlen = m->angle_to_length((m->min_angle+m->angle_range) - m->angle_reference); 
+        if (newlen > m->actuator_max_limit){
+            newlen = m->actuator_max_limit - 1;
+        }
+        m->set_length = newlen; 
     }
     //angle is smaller than allowed => use minimum angle
     else if (angle < m->min_angle){
-        m->set_length = m->angle_to_length(m->min_angle - m->angle_reference); 
+        uint16_t newlen = m->angle_to_length(m->min_angle - m->angle_reference); 
+        if (newlen < m->actuator_min_limit){
+            newlen = m->actuator_min_limit + 1; 
+        }
+        m->set_length = newlen;
     }
     m->timeout_value = 0;
+    
+    calculateMoveLength(m);
+    systick = 0;
     return 1;
 }   
+
+void calculateMoveLength(volatile motor *m){
+      //Store move length for speed calculations
+     if (m->current_length < m->set_length){
+         m->move_length_mm = m->set_length - m->current_length;
+     }
+     else if (m->current_length > m->set_length){
+         m->move_length_mm = m->current_length - m->set_length;
+     }
+}
 
 float getMotorMinAngle(volatile motor *m){
     return m->min_angle;
@@ -378,8 +469,15 @@ void shutdownMotors(void){
 
 uint8_t setMotorLength(volatile motor *m, uint16_t length){
     if (length >= m->actuator_min_limit && length <= m->actuator_max_limit){
-        m->set_length = length;
-        m->status = WAITING;
+        //Execute move only if it is outside of hysteresis window
+        if (m->current_length > m->set_length + m->length_hysteresis){
+            if (m->current_length < m->set_length - m->length_hysteresis){ 
+                m->set_length = length;
+                m->status = WAITING;
+
+                calculateMoveLength(m);
+            }
+        }
         return 0;
     }
     else{
@@ -409,29 +507,48 @@ void setLengthLoop(void){
                     m->timeout_value ++; //update timeout variables
                     m->status = RUNNING_BACKWARD;
                     running_motor = i;
+                    if (m->timeout_value%1000 == 0){
+                        measureActuatorCurrent(m);
+                    }
                 }
                 else if (m->current_length < m->set_length - m->length_hysteresis){
                     motorControl(m, FORWARD, m->max_pwm);
                     m->timeout_value ++; //update timeout variables
                     m->status = RUNNING_FORWARD;
                     running_motor = i;
+                    if (m->timeout_value%1000 == 0){
+                        measureActuatorCurrent(m);
+                    }
                 }
                 else{
                     for(; m->current_pwm > 0; m->current_pwm--){
                         setMotor(m, m->current_dir, m->current_pwm);
                         delayLoop_us(m->deacceleration_time);
                     }
-                    //fprintf(port,"Tval:%ld\n",m->timeout_value);
                     m->timeout_value = 0; //Clear timeout
                     m->status = STATUS_OK;
-                    disableMotorPWM(m);       
-                    _delay_ms(10);       
+                    disableMotorPWM(m);
+                    calculateMoveSpeed(m, systick);       
+                    _delay_ms(25);       
                     running_motor = -1;    
+                    systick = 0;
                 }
             }
         }
     }
 }
+
+void calculateMoveSpeed(volatile motor *m, uint16_t tick){
+    if (tick > 0 && m->move_length_mm > 0){
+        float milliseconds = tick;
+        float mlen = m->move_length_mm;
+        m->move_speed_mm = mlen / (milliseconds/100);
+    }
+    else{
+        m->move_speed_mm = 0.0;
+    }
+}
+
 
 void forceMotors(uint8_t dir, uint8_t time){
     if (dir != FORWARD && dir != BACKWARD){
@@ -566,8 +683,18 @@ void initMotor(FILE *debugport){
 
         m->current_length = getActuatorLength(m);
         m->set_length = m->current_length;
-   } 
-   // GTCCR = 0x00;       //Start Counter
+   }
+
+   //Init timeout counter TIMER1
+   TCCR1A = 0x00; // WGM11 = 0, WGM10 = 0   => CTC mode
+   //clock frequency = 16MHz / 1024 = 15625Hz
+   TCCR1B = 0x08 + 0x05; //WGM12 = 1, WGM 13 = 0        => CTC mode, Clock divider 1024 = 0x05
+   OCR1AH = 0x00; //Zero this when tests are done
+   OCR1AL = 0x9C;  // interrupt 100 times per second 15625/156~about 100 
+   //Set interrupt to TIMER1 COMPA
+   TIMSK1 = 0x02; //OCIEA enabled
+  
+   // GTCCR = 0x00;//Counter is started at the main loop Start Counter
 }
 void disableMotorPWM(volatile motor *m){
 
@@ -582,7 +709,6 @@ void disableMotorPWM(volatile motor *m){
     *m->rev_OCR_addr = 0x00; //Init PWM to zero
     m->current_pwm = 0; //set PWM to zero
     m->timeout_value = 0; //Reset timeout values
-    
 } 
 //volatile uint8_t *OCRC_ADDR[] = {&OCR1CL, &OCR4AL }
 //volatile uint8_t *OCRB_ADDR[] = {&OCR1BL, &OCR4BL }
