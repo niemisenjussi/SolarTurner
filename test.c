@@ -52,6 +52,12 @@ int main (int argc, char *argv[])
     initButtons();    
 
     initSystemTimer(); //Starts all timers which are used => GTCCR = 0x00;
+
+    //for (float i=0; i<90; i+=1){
+    //    uint16_t len = 
+    //    fprintf(&port, "Len:%d, angle:%f\n",tiltDegToLength(i),i);
+    //}
+    //while(1){}
     
     GTCCR = 0x00;
     sei();

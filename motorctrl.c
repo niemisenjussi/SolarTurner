@@ -27,8 +27,8 @@
 //SET limits for the API
 #define MIN_ANGLE 105.0
 #define ANGLE_RANGE 120.0
-#define MIN_TILT 30.0
-#define TILT_RANGE 40.0
+#define MIN_TILT 8.0
+#define TILT_RANGE 60.0
 
 #define ANGLE_REFERENCE 165.0 //heading by default South
 #define TILT_REFERENCE 0.0   //Tilted 5 degrees upward frow vertical angle
@@ -41,9 +41,9 @@
 #define ANGLE_C 190L //Distance from center to actuator far end
 #define ANGLE_Y 5L  //Offset distance from X to outside
 
-#define TILT_X 520L //Distance from center to actuator lower point
+#define TILT_X 505L //Distance from center to actuator lower point
 #define TILT_C 170L //Distance from center to actuator far end
-#define TILT_Y 0L  //Offset distance from X to outside
+#define TILT_Y -145L  //Offset distance from X to outside
 
 //Define Actuator physical measurements
 #define ACTUATOR_A_MIN_LENGTH 515L //absolute value
@@ -53,8 +53,8 @@
 
 #define ACTUATOR_B_MIN_LENGTH 340L  //375 515-890               //pidempi
 #define ACTUATOR_B_MAX_LENGTH 540L  //200 340-540 pisimmällään  //lyhyempi
-#define ACTUATOR_B_MIN_LIMIT  380L
-#define ACTUATOR_B_MAX_LIMIT  485L
+#define ACTUATOR_B_MIN_LIMIT  377L
+#define ACTUATOR_B_MAX_LIMIT  500L
 
 #define VREF 4.7 //Reference voltage which is used for actuators
 #define ACTUATOR_A_LOW_OFFSET 0.93
