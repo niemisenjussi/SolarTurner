@@ -1,0 +1,3021 @@
+   1               		.file	"serialparser.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__tmp_reg__ = 0
+   6               	__zero_reg__ = 1
+   8               		.text
+   9               	.Ltext0:
+ 127               	.global	read_until_line_end
+ 129               	read_until_line_end:
+   1:serialparser.c **** #include "serialparser.h"
+   2:serialparser.c **** #include "ADC.h"
+   3:serialparser.c **** #include "USART.h"
+   4:serialparser.c **** #include "motorctrl.h"
+   5:serialparser.c **** #include "buttons.h"
+   6:serialparser.c **** #include <avr/io.h>
+   7:serialparser.c **** #include <stdio.h>
+   8:serialparser.c **** #include <stdlib.h>
+   9:serialparser.c **** #include <util/delay.h>
+  10:serialparser.c **** #include <string.h>
+  11:serialparser.c **** #include <avr/interrupt.h>
+  12:serialparser.c **** 
+  13:serialparser.c **** #define SW_VERSION 1
+  14:serialparser.c **** #define BUFSIZE 0xFF
+  15:serialparser.c **** 
+  16:serialparser.c **** #define FIND_SUCCESS 1
+  17:serialparser.c **** #define ERROR_CANNOT_FIND 2
+  18:serialparser.c **** #define ERROR_MAX_LENGTH 3
+  19:serialparser.c **** 
+  20:serialparser.c **** volatile uint8_t ring_write = 0;
+  21:serialparser.c **** volatile uint8_t ring_read = 0;
+  22:serialparser.c **** volatile char buffer[BUFSIZE+1];
+  23:serialparser.c **** 
+  24:serialparser.c **** FILE *port; //Serialport to host machine
+  25:serialparser.c **** 
+  26:serialparser.c **** __attribute__((always_inline)) inline static void clearBuffer(volatile char *buffer,uint8_t len){
+  27:serialparser.c **** 	for(uint8_t i=0;i<len;i++){	*buffer++ = '\0';}
+  28:serialparser.c **** }
+  29:serialparser.c **** 
+  30:serialparser.c **** ISR(USART_RX_vect) //Serial port to Host machine
+  31:serialparser.c **** {
+  32:serialparser.c **** 	volatile char temp = USART_Receive0();
+  33:serialparser.c **** 	buffer[ring_write++] = temp;
+  34:serialparser.c **** 	if (temp == '\n' || temp == '\r'){
+  35:serialparser.c ****         parseCommands();
+  36:serialparser.c **** 	}
+  37:serialparser.c **** }
+  38:serialparser.c **** 
+  39:serialparser.c **** /*
+  40:serialparser.c ****     Reads ring buffer until it finds linefeed, carrier return or ring buffer is empty.
+  41:serialparser.c **** */
+  42:serialparser.c **** void read_until_line_end(void){
+ 131               	.LM0:
+ 132               	.LFBB1:
+ 133               	.L20:
+ 134               	/* prologue: function */
+ 135               	/* frame size = 0 */
+ 136               	/* stack size = 0 */
+ 137               	.L__stack_usage = 0
+  43:serialparser.c ****     while(buffer[ring_read] != '\n' &&  buffer[ring_read] != '\r'  && ring_read != ring_write){
+ 139               	.LM1:
+ 140 0000 E091 0000 		lds r30,ring_read
+ 141 0004 F0E0      		ldi r31,0
+ 142 0006 E050      		subi r30,lo8(-(buffer))
+ 143 0008 F040      		sbci r31,hi8(-(buffer))
+ 144 000a 8081      		ld r24,Z
+ 145 000c 8A30      		cpi r24,lo8(10)
+ 146 000e 01F0      		breq .L1
+ 147 0010 E091 0000 		lds r30,ring_read
+ 148 0014 F0E0      		ldi r31,0
+ 149 0016 E050      		subi r30,lo8(-(buffer))
+ 150 0018 F040      		sbci r31,hi8(-(buffer))
+ 151 001a 8081      		ld r24,Z
+ 152 001c 8D30      		cpi r24,lo8(13)
+ 153 001e 01F0      		breq .L1
+ 154 0020 9091 0000 		lds r25,ring_read
+ 155 0024 8091 0000 		lds r24,ring_write
+ 156 0028 9817      		cp r25,r24
+ 157 002a 01F0      		breq .L1
+  44:serialparser.c ****         ring_read++;
+ 159               	.LM2:
+ 160 002c 8091 0000 		lds r24,ring_read
+ 161 0030 8F5F      		subi r24,lo8(-(1))
+ 162 0032 8093 0000 		sts ring_read,r24
+ 163 0036 00C0      		rjmp .L20
+ 164               	.L1:
+ 165 0038 0895      		ret
+ 167               	.Lscope1:
+ 170               	.global	initSerialParser
+ 172               	initSerialParser:
+  45:serialparser.c ****     }
+  46:serialparser.c **** }
+  47:serialparser.c **** 
+  48:serialparser.c **** /*
+  49:serialparser.c ****     Initializes serialport and clears ring buffer
+  50:serialparser.c ****     This function also takes angle and tilt global variable pointer where set angle values are stor
+  51:serialparser.c **** */
+  52:serialparser.c **** void initSerialParser(FILE *serialport){
+ 174               	.LM3:
+ 175               	.LFBB2:
+ 176               	/* prologue: function */
+ 177               	/* frame size = 0 */
+ 178               	/* stack size = 0 */
+ 179               	.L__stack_usage = 0
+  53:serialparser.c ****     port = serialport;
+ 181               	.LM4:
+ 182 003a 9093 0000 		sts port+1,r25
+ 183 003e 8093 0000 		sts port,r24
+ 184 0042 E0E0      		ldi r30,lo8(buffer)
+ 185 0044 F0E0      		ldi r31,hi8(buffer)
+ 186               	.L23:
+ 187               	.LBB54:
+ 188               	.LBB55:
+  27:serialparser.c **** }
+ 190               	.LM5:
+ 191 0046 1082      		st Z,__zero_reg__
+ 192 0048 3196      		adiw r30,1
+ 193 004a 80E0      		ldi r24,hi8(buffer+255)
+ 194 004c E030      		cpi r30,lo8(buffer+255)
+ 195 004e F807      		cpc r31,r24
+ 196 0050 01F4      		brne .L23
+ 197               	/* epilogue start */
+ 198               	.LBE55:
+ 199               	.LBE54:
+  54:serialparser.c ****     clearBuffer(buffer, BUFSIZE);
+  55:serialparser.c **** }
+ 201               	.LM6:
+ 202 0052 0895      		ret
+ 204               	.Lscope2:
+ 208               	.global	readInt16
+ 210               	readInt16:
+  56:serialparser.c **** 
+  57:serialparser.c **** /*
+  58:serialparser.c ****     Reads 16 bit int from ringbuffer. 
+  59:serialparser.c ****     Function must be used because serial data is stored in to ring buffer
+  60:serialparser.c **** */
+  61:serialparser.c **** uint16_t readInt16(uint8_t start, uint8_t stop){
+ 212               	.LM7:
+ 213               	.LFBB3:
+ 214 0054 A5E0      		ldi r26,lo8(5)
+ 215 0056 B0E0      		ldi r27,0
+ 216 0058 E0E0      		ldi r30,lo8(gs(1f))
+ 217 005a F0E0      		ldi r31,hi8(gs(1f))
+ 218 005c 0C94 0000 		jmp __prologue_saves__+((18 - 2) * 2)
+ 219               	1:
+ 220               	/* prologue: function */
+ 221               	/* frame size = 5 */
+ 222               	/* stack size = 7 */
+ 223               	.L__stack_usage = 7
+ 224 0060 E82F      		mov r30,r24
+  62:serialparser.c ****     char buf[5] = {'\0','\0','\0','\0','\0'};
+ 226               	.LM8:
+ 227 0062 CE01      		movw r24,r28
+ 228 0064 0196      		adiw r24,1
+ 229 0066 25E0      		ldi r18,lo8(5)
+ 230 0068 DC01      		movw r26,r24
+ 231               		0:
+ 232 006a 1D92      		st X+,__zero_reg__
+ 233 006c 2A95      		dec r18
+ 234 006e 01F4      		brne 0b
+ 235               	.LBB57:
+  63:serialparser.c ****     
+  64:serialparser.c ****     //clearBuffer(buf,5);
+  65:serialparser.c ****     for (uint8_t i=0; i<5; i++){
+  66:serialparser.c ****         buf[i] = buffer[start++];
+ 237               	.LM9:
+ 238 0070 41E0      		ldi r20,lo8(1)
+ 239 0072 4E0F      		add r20,r30
+ 240 0074 2E2F      		mov r18,r30
+ 241 0076 30E0      		ldi r19,0
+ 242 0078 2050      		subi r18,lo8(-(buffer))
+ 243 007a 3040      		sbci r19,hi8(-(buffer))
+ 244 007c D901      		movw r26,r18
+ 245 007e 2C91      		ld r18,X
+ 246 0080 2983      		std Y+1,r18
+  67:serialparser.c ****         if (start == stop){
+ 248               	.LM10:
+ 249 0082 4617      		cp r20,r22
+ 250 0084 01F0      		breq .L26
+  66:serialparser.c ****         if (start == stop){
+ 252               	.LM11:
+ 253 0086 22E0      		ldi r18,lo8(2)
+ 254 0088 2E0F      		add r18,r30
+ 255 008a A42F      		mov r26,r20
+ 256 008c B0E0      		ldi r27,0
+ 257 008e A050      		subi r26,lo8(-(buffer))
+ 258 0090 B040      		sbci r27,hi8(-(buffer))
+ 259 0092 3C91      		ld r19,X
+ 260 0094 3A83      		std Y+2,r19
+ 262               	.LM12:
+ 263 0096 2617      		cp r18,r22
+ 264 0098 01F0      		breq .L26
+  66:serialparser.c ****         if (start == stop){
+ 266               	.LM13:
+ 267 009a 33E0      		ldi r19,lo8(3)
+ 268 009c 3E0F      		add r19,r30
+ 269 009e A22F      		mov r26,r18
+ 270 00a0 B0E0      		ldi r27,0
+ 271 00a2 A050      		subi r26,lo8(-(buffer))
+ 272 00a4 B040      		sbci r27,hi8(-(buffer))
+ 273 00a6 2C91      		ld r18,X
+ 274 00a8 2B83      		std Y+3,r18
+ 276               	.LM14:
+ 277 00aa 3617      		cp r19,r22
+ 278 00ac 01F0      		breq .L26
+  66:serialparser.c ****         if (start == stop){
+ 280               	.LM15:
+ 281 00ae EC5F      		subi r30,lo8(-(4))
+ 282 00b0 A32F      		mov r26,r19
+ 283 00b2 B0E0      		ldi r27,0
+ 284 00b4 A050      		subi r26,lo8(-(buffer))
+ 285 00b6 B040      		sbci r27,hi8(-(buffer))
+ 286 00b8 2C91      		ld r18,X
+ 287 00ba 2C83      		std Y+4,r18
+ 289               	.LM16:
+ 290 00bc E617      		cp r30,r22
+ 291 00be 01F0      		breq .L26
+  66:serialparser.c ****         if (start == stop){
+ 293               	.LM17:
+ 294 00c0 F0E0      		ldi r31,0
+ 295 00c2 E050      		subi r30,lo8(-(buffer))
+ 296 00c4 F040      		sbci r31,hi8(-(buffer))
+ 297 00c6 2081      		ld r18,Z
+ 298 00c8 2D83      		std Y+5,r18
+ 299               	.L26:
+ 300               	.LBE57:
+  68:serialparser.c ****            i = 5;
+  69:serialparser.c ****         }
+  70:serialparser.c ****     }
+  71:serialparser.c ****     return atoi(buf);
+ 302               	.LM18:
+ 303 00ca 0E94 0000 		call atoi
+ 304               	/* epilogue start */
+  72:serialparser.c **** }
+ 306               	.LM19:
+ 307 00ce 2596      		adiw r28,5
+ 308 00d0 E2E0      		ldi r30, lo8(2)
+ 309 00d2 0C94 0000 		jmp __epilogue_restores__ + ((18 - 2) * 2)
+ 314               	.Lscope3:
+ 318               	.global	readFloat
+ 320               	readFloat:
+  73:serialparser.c **** 
+  74:serialparser.c **** /*
+  75:serialparser.c ****     Reads floating point value from ringbuffer. 
+  76:serialparser.c ****     Function must be used because serial data is stored in to ring buffer
+  77:serialparser.c **** */
+  78:serialparser.c **** double readFloat(uint8_t start, uint8_t stop){
+ 322               	.LM20:
+ 323               	.LFBB4:
+ 324 00d6 AAE0      		ldi r26,lo8(10)
+ 325 00d8 B0E0      		ldi r27,0
+ 326 00da E0E0      		ldi r30,lo8(gs(1f))
+ 327 00dc F0E0      		ldi r31,hi8(gs(1f))
+ 328 00de 0C94 0000 		jmp __prologue_saves__+((18 - 2) * 2)
+ 329               	1:
+ 330               	/* prologue: function */
+ 331               	/* frame size = 10 */
+ 332               	/* stack size = 12 */
+ 333               	.L__stack_usage = 12
+ 334 00e2 E82F      		mov r30,r24
+  79:serialparser.c ****     char buf[10] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0','\0'};
+ 336               	.LM21:
+ 337 00e4 CE01      		movw r24,r28
+ 338 00e6 0196      		adiw r24,1
+ 339 00e8 2AE0      		ldi r18,lo8(10)
+ 340 00ea DC01      		movw r26,r24
+ 341               		0:
+ 342 00ec 1D92      		st X+,__zero_reg__
+ 343 00ee 2A95      		dec r18
+ 344 00f0 01F4      		brne 0b
+ 345               	.LBB59:
+  80:serialparser.c ****     
+  81:serialparser.c ****     //clearBuffer(buf,5);
+  82:serialparser.c ****     for (uint8_t i=0; i<10; i++){
+  83:serialparser.c ****         buf[i] = buffer[start++];
+ 347               	.LM22:
+ 348 00f2 41E0      		ldi r20,lo8(1)
+ 349 00f4 4E0F      		add r20,r30
+ 350 00f6 2E2F      		mov r18,r30
+ 351 00f8 30E0      		ldi r19,0
+ 352 00fa 2050      		subi r18,lo8(-(buffer))
+ 353 00fc 3040      		sbci r19,hi8(-(buffer))
+ 354 00fe D901      		movw r26,r18
+ 355 0100 2C91      		ld r18,X
+ 356 0102 2983      		std Y+1,r18
+  84:serialparser.c ****         if (start == stop){
+ 358               	.LM23:
+ 359 0104 4617      		cp r20,r22
+ 360 0106 01F4      		brne .+2
+ 361 0108 00C0      		rjmp .L28
+  83:serialparser.c ****         if (start == stop){
+ 363               	.LM24:
+ 364 010a 22E0      		ldi r18,lo8(2)
+ 365 010c 2E0F      		add r18,r30
+ 366 010e A42F      		mov r26,r20
+ 367 0110 B0E0      		ldi r27,0
+ 368 0112 A050      		subi r26,lo8(-(buffer))
+ 369 0114 B040      		sbci r27,hi8(-(buffer))
+ 370 0116 3C91      		ld r19,X
+ 371 0118 3A83      		std Y+2,r19
+ 373               	.LM25:
+ 374 011a 2617      		cp r18,r22
+ 375 011c 01F4      		brne .+2
+ 376 011e 00C0      		rjmp .L28
+  83:serialparser.c ****         if (start == stop){
+ 378               	.LM26:
+ 379 0120 33E0      		ldi r19,lo8(3)
+ 380 0122 3E0F      		add r19,r30
+ 381 0124 A22F      		mov r26,r18
+ 382 0126 B0E0      		ldi r27,0
+ 383 0128 A050      		subi r26,lo8(-(buffer))
+ 384 012a B040      		sbci r27,hi8(-(buffer))
+ 385 012c 2C91      		ld r18,X
+ 386 012e 2B83      		std Y+3,r18
+ 388               	.LM27:
+ 389 0130 3617      		cp r19,r22
+ 390 0132 01F4      		brne .+2
+ 391 0134 00C0      		rjmp .L28
+  83:serialparser.c ****         if (start == stop){
+ 393               	.LM28:
+ 394 0136 24E0      		ldi r18,lo8(4)
+ 395 0138 2E0F      		add r18,r30
+ 396 013a A32F      		mov r26,r19
+ 397 013c B0E0      		ldi r27,0
+ 398 013e A050      		subi r26,lo8(-(buffer))
+ 399 0140 B040      		sbci r27,hi8(-(buffer))
+ 400 0142 3C91      		ld r19,X
+ 401 0144 3C83      		std Y+4,r19
+ 403               	.LM29:
+ 404 0146 2617      		cp r18,r22
+ 405 0148 01F0      		breq .L28
+  83:serialparser.c ****         if (start == stop){
+ 407               	.LM30:
+ 408 014a 35E0      		ldi r19,lo8(5)
+ 409 014c 3E0F      		add r19,r30
+ 410 014e A22F      		mov r26,r18
+ 411 0150 B0E0      		ldi r27,0
+ 412 0152 A050      		subi r26,lo8(-(buffer))
+ 413 0154 B040      		sbci r27,hi8(-(buffer))
+ 414 0156 2C91      		ld r18,X
+ 415 0158 2D83      		std Y+5,r18
+ 417               	.LM31:
+ 418 015a 3617      		cp r19,r22
+ 419 015c 01F0      		breq .L28
+  83:serialparser.c ****         if (start == stop){
+ 421               	.LM32:
+ 422 015e 26E0      		ldi r18,lo8(6)
+ 423 0160 2E0F      		add r18,r30
+ 424 0162 A32F      		mov r26,r19
+ 425 0164 B0E0      		ldi r27,0
+ 426 0166 A050      		subi r26,lo8(-(buffer))
+ 427 0168 B040      		sbci r27,hi8(-(buffer))
+ 428 016a 3C91      		ld r19,X
+ 429 016c 3E83      		std Y+6,r19
+ 431               	.LM33:
+ 432 016e 2617      		cp r18,r22
+ 433 0170 01F0      		breq .L28
+  83:serialparser.c ****         if (start == stop){
+ 435               	.LM34:
+ 436 0172 37E0      		ldi r19,lo8(7)
+ 437 0174 3E0F      		add r19,r30
+ 438 0176 A22F      		mov r26,r18
+ 439 0178 B0E0      		ldi r27,0
+ 440 017a A050      		subi r26,lo8(-(buffer))
+ 441 017c B040      		sbci r27,hi8(-(buffer))
+ 442 017e 2C91      		ld r18,X
+ 443 0180 2F83      		std Y+7,r18
+ 445               	.LM35:
+ 446 0182 3617      		cp r19,r22
+ 447 0184 01F0      		breq .L28
+  83:serialparser.c ****         if (start == stop){
+ 449               	.LM36:
+ 450 0186 28E0      		ldi r18,lo8(8)
+ 451 0188 2E0F      		add r18,r30
+ 452 018a A32F      		mov r26,r19
+ 453 018c B0E0      		ldi r27,0
+ 454 018e A050      		subi r26,lo8(-(buffer))
+ 455 0190 B040      		sbci r27,hi8(-(buffer))
+ 456 0192 3C91      		ld r19,X
+ 457 0194 3887      		std Y+8,r19
+ 459               	.LM37:
+ 460 0196 2617      		cp r18,r22
+ 461 0198 01F0      		breq .L28
+  83:serialparser.c ****         if (start == stop){
+ 463               	.LM38:
+ 464 019a E75F      		subi r30,lo8(-(9))
+ 465 019c A22F      		mov r26,r18
+ 466 019e B0E0      		ldi r27,0
+ 467 01a0 A050      		subi r26,lo8(-(buffer))
+ 468 01a2 B040      		sbci r27,hi8(-(buffer))
+ 469 01a4 2C91      		ld r18,X
+ 470 01a6 2987      		std Y+9,r18
+ 472               	.LM39:
+ 473 01a8 E617      		cp r30,r22
+ 474 01aa 01F0      		breq .L28
+  83:serialparser.c ****         if (start == stop){
+ 476               	.LM40:
+ 477 01ac F0E0      		ldi r31,0
+ 478 01ae E050      		subi r30,lo8(-(buffer))
+ 479 01b0 F040      		sbci r31,hi8(-(buffer))
+ 480 01b2 2081      		ld r18,Z
+ 481 01b4 2A87      		std Y+10,r18
+ 482               	.L28:
+ 483               	.LBE59:
+  85:serialparser.c ****            i = 10;
+  86:serialparser.c ****         }
+  87:serialparser.c ****     }
+  88:serialparser.c ****    // printf(buf);
+  89:serialparser.c ****    // printf("\n");
+  90:serialparser.c ****     return atof(buf);
+ 485               	.LM41:
+ 486 01b6 0E94 0000 		call atof
+ 487               	/* epilogue start */
+  91:serialparser.c **** }
+ 489               	.LM42:
+ 490 01ba 2A96      		adiw r28,10
+ 491 01bc E2E0      		ldi r30, lo8(2)
+ 492 01be 0C94 0000 		jmp __epilogue_restores__ + ((18 - 2) * 2)
+ 497               	.Lscope4:
+ 505               	.global	findParameter
+ 507               	findParameter:
+  92:serialparser.c **** 
+  93:serialparser.c **** //Start and Stop values are pointing to Global ring buffer
+  94:serialparser.c **** uint8_t findParameter(char startchar, char stopchar, char secondstopchar, uint8_t maxlength, uint8_
+ 509               	.LM43:
+ 510               	.LFBB5:
+ 511 01c2 EF92      		push r14
+ 512 01c4 FF92      		push r15
+ 513 01c6 0F93      		push r16
+ 514 01c8 1F93      		push r17
+ 515               	/* prologue: function */
+ 516               	/* frame size = 0 */
+ 517               	/* stack size = 4 */
+ 518               	.L__stack_usage = 4
+  95:serialparser.c ****     //Find correct start character
+  96:serialparser.c ****     while(buffer[ring_read] != startchar && ring_read != ring_write){ 
+ 520               	.LM44:
+ 521 01ca 00C0      		rjmp .L30
+ 522               	.L43:
+ 524               	.LM45:
+ 525 01cc 3091 0000 		lds r19,ring_read
+ 526 01d0 9091 0000 		lds r25,ring_write
+ 527 01d4 3917      		cp r19,r25
+ 528 01d6 01F0      		breq .L32
+  97:serialparser.c ****         ring_read++;
+ 530               	.LM46:
+ 531 01d8 9091 0000 		lds r25,ring_read
+ 532 01dc 9F5F      		subi r25,lo8(-(1))
+ 533 01de 9093 0000 		sts ring_read,r25
+  98:serialparser.c ****         maxlength --;
+ 535               	.LM47:
+ 536 01e2 2150      		subi r18,lo8(-(-1))
+  99:serialparser.c ****         if (maxlength == 0){
+ 538               	.LM48:
+ 539 01e4 01F0      		breq .L37
+ 540               	.L30:
+  96:serialparser.c ****         ring_read++;
+ 542               	.LM49:
+ 543 01e6 E091 0000 		lds r30,ring_read
+ 544 01ea F0E0      		ldi r31,0
+ 545 01ec E050      		subi r30,lo8(-(buffer))
+ 546 01ee F040      		sbci r31,hi8(-(buffer))
+ 547 01f0 9081      		ld r25,Z
+ 548 01f2 9813      		cpse r25,r24
+ 549 01f4 00C0      		rjmp .L43
+ 550               	.L32:
+ 100:serialparser.c ****             return ERROR_MAX_LENGTH;
+ 101:serialparser.c ****         }
+ 102:serialparser.c ****     }
+ 103:serialparser.c ****     if (ring_read == ring_write){
+ 552               	.LM50:
+ 553 01f6 9091 0000 		lds r25,ring_read
+ 554 01fa 8091 0000 		lds r24,ring_write
+ 555 01fe 9817      		cp r25,r24
+ 556 0200 01F0      		breq .L38
+ 557               	.LBB62:
+ 558               	.LBB63:
+ 104:serialparser.c ****         return ERROR_CANNOT_FIND;
+ 105:serialparser.c ****     }
+ 106:serialparser.c **** 
+ 107:serialparser.c ****     ring_read++; ///Next character is what we are looking for
+ 560               	.LM51:
+ 561 0202 8091 0000 		lds r24,ring_read
+ 562 0206 8F5F      		subi r24,lo8(-(1))
+ 563 0208 8093 0000 		sts ring_read,r24
+ 108:serialparser.c **** 
+ 109:serialparser.c ****     //Find stop character
+ 110:serialparser.c ****     *start = ring_read;
+ 565               	.LM52:
+ 566 020c 8091 0000 		lds r24,ring_read
+ 567 0210 F801      		movw r30,r16
+ 568 0212 8083      		st Z,r24
+ 569 0214 00C0      		rjmp .L41
+ 570               	.L42:
+ 111:serialparser.c ****     while(buffer[ring_read] != stopchar && buffer[ring_read] != secondstopchar){ //Find next delimi
+ 572               	.LM53:
+ 573 0216 E091 0000 		lds r30,ring_read
+ 574 021a F0E0      		ldi r31,0
+ 575 021c E050      		subi r30,lo8(-(buffer))
+ 576 021e F040      		sbci r31,hi8(-(buffer))
+ 577 0220 8081      		ld r24,Z
+ 578 0222 4817      		cp r20,r24
+ 579 0224 01F0      		breq .L35
+ 112:serialparser.c ****         ring_read++; //Step forward
+ 581               	.LM54:
+ 582 0226 8091 0000 		lds r24,ring_read
+ 583 022a 8F5F      		subi r24,lo8(-(1))
+ 584 022c 8093 0000 		sts ring_read,r24
+ 585               	.L41:
+ 111:serialparser.c ****     while(buffer[ring_read] != stopchar && buffer[ring_read] != secondstopchar){ //Find next delimi
+ 587               	.LM55:
+ 588 0230 E091 0000 		lds r30,ring_read
+ 589 0234 F0E0      		ldi r31,0
+ 590 0236 E050      		subi r30,lo8(-(buffer))
+ 591 0238 F040      		sbci r31,hi8(-(buffer))
+ 592 023a 8081      		ld r24,Z
+ 593 023c 6813      		cpse r22,r24
+ 594 023e 00C0      		rjmp .L42
+ 595               	.L35:
+ 113:serialparser.c ****     }
+ 114:serialparser.c ****     *stop = ring_read;
+ 597               	.LM56:
+ 598 0240 8091 0000 		lds r24,ring_read
+ 599 0244 F701      		movw r30,r14
+ 600 0246 8083      		st Z,r24
+ 601 0248 81E0      		ldi r24,lo8(1)
+ 602               	/* epilogue start */
+ 603               	.LBE63:
+ 604               	.LBE62:
+ 115:serialparser.c ****     
+ 116:serialparser.c ****     return FIND_SUCCESS;
+ 117:serialparser.c **** }
+ 606               	.LM57:
+ 607 024a 1F91      		pop r17
+ 608 024c 0F91      		pop r16
+ 609 024e FF90      		pop r15
+ 610 0250 EF90      		pop r14
+ 611 0252 0895      		ret
+ 612               	.L38:
+ 104:serialparser.c ****     }
+ 614               	.LM58:
+ 615 0254 82E0      		ldi r24,lo8(2)
+ 616               	/* epilogue start */
+ 618               	.LM59:
+ 619 0256 1F91      		pop r17
+ 620 0258 0F91      		pop r16
+ 621 025a FF90      		pop r15
+ 622 025c EF90      		pop r14
+ 623 025e 0895      		ret
+ 624               	.L37:
+ 100:serialparser.c ****         }
+ 626               	.LM60:
+ 627 0260 83E0      		ldi r24,lo8(3)
+ 628               	/* epilogue start */
+ 630               	.LM61:
+ 631 0262 1F91      		pop r17
+ 632 0264 0F91      		pop r16
+ 633 0266 FF90      		pop r15
+ 634 0268 EF90      		pop r14
+ 635 026a 0895      		ret
+ 637               	.Lscope5:
+ 639               	.global	printerr
+ 641               	printerr:
+ 118:serialparser.c **** 
+ 119:serialparser.c **** void printerr(void){
+ 643               	.LM62:
+ 644               	.LFBB6:
+ 645               	/* prologue: function */
+ 646               	/* frame size = 0 */
+ 647               	/* stack size = 0 */
+ 648               	.L__stack_usage = 0
+ 120:serialparser.c ****     fprintf_P(port, PSTR("ERR\n"));
+ 650               	.LM63:
+ 651 026c 80E0      		ldi r24,lo8(__c.2498)
+ 652 026e 90E0      		ldi r25,hi8(__c.2498)
+ 653 0270 9F93      		push r25
+ 654 0272 8F93      		push r24
+ 655 0274 8091 0000 		lds r24,port+1
+ 656 0278 8F93      		push r24
+ 657 027a 8091 0000 		lds r24,port
+ 658 027e 8F93      		push r24
+ 659 0280 0E94 0000 		call fprintf_P
+ 660 0284 0F90      		pop __tmp_reg__
+ 661 0286 0F90      		pop __tmp_reg__
+ 662 0288 0F90      		pop __tmp_reg__
+ 663 028a 0F90      		pop __tmp_reg__
+ 664 028c 0895      		ret
+ 666               	.Lscope6:
+ 667               		.section	.rodata.str1.1,"aMS",@progbits,1
+ 668               	.LC0:
+ 669 0000 4731 3A25 		.string	"G1:%d\n"
+ 669      640A 00
+ 670               	.LC1:
+ 671 0007 4732 3A25 		.string	"G2:%5.2f:%5.2f\n"
+ 671      352E 3266 
+ 671      3A25 352E 
+ 671      3266 0A00 
+ 672               	.LC2:
+ 673 0017 4733 3A25 		.string	"G3:%5.2f:%5.2f\n"
+ 673      352E 3266 
+ 673      3A25 352E 
+ 673      3266 0A00 
+ 674               	.LC3:
+ 675 0027 4734 3A25 		.string	"G4:%d:%d\n"
+ 675      643A 2564 
+ 675      0A00 
+ 676               	.LC4:
+ 677 0031 4735 3A25 		.string	"G5:%d:%d\n"
+ 677      643A 2564 
+ 677      0A00 
+ 678               	.LC5:
+ 679 003b 4736 3A25 		.string	"G6:%d:%d:%d\n"
+ 679      643A 2564 
+ 679      3A25 640A 
+ 679      00
+ 680               	.LC6:
+ 681 0048 4737 3A25 		.string	"G7:%5.2f:%5.2f:%5.2f:%5.2f\n"
+ 681      352E 3266 
+ 681      3A25 352E 
+ 681      3266 3A25 
+ 681      352E 3266 
+ 682               	.LC7:
+ 683 0064 4738 3A25 		.string	"G8:%d:%d\n"
+ 683      643A 2564 
+ 683      0A00 
+ 684               	.LC8:
+ 685 006e 4739 3A25 		.string	"G9:%5.2f:%5.2f\n"
+ 685      352E 3266 
+ 685      3A25 352E 
+ 685      3266 0A00 
+ 686               	.LC9:
+ 687 007e 4741 3A25 		.string	"GA:%5.2f:%5.2f\n"
+ 687      352E 3266 
+ 687      3A25 352E 
+ 687      3266 0A00 
+ 688               	.LC10:
+ 689 008e 4742 3A25 		.string	"GB:%d:%d\n"
+ 689      643A 2564 
+ 689      0A00 
+ 690               	.LC11:
+ 691 0098 4125 643A 		.string	"A%d:%d\n"
+ 691      2564 0A00 
+ 692               	.LC12:
+ 693 00a0 2564 3A25 		.string	"%d:%d:"
+ 693      643A 00
+ 694               	.LC13:
+ 695 00a7 4225 643A 		.string	"B%d:%ld\n"
+ 695      256C 640A 
+ 695      00
+ 696               	.LC14:
+ 697 00b0 2564 3A25 		.string	"%d:%ld:"
+ 697      6C64 3A00 
+ 698               	.LC15:
+ 699 00b8 533A 2564 		.string	"S:%d:%d\n"
+ 699      3A25 640A 
+ 699      00
+ 700               		.text
+ 702               	.global	parseCommands
+ 704               	parseCommands:
+ 121:serialparser.c **** }
+ 122:serialparser.c **** 
+ 123:serialparser.c **** void parseCommands(void){
+ 706               	.LM64:
+ 707               	.LFBB7:
+ 708 028e A2E1      		ldi r26,lo8(18)
+ 709 0290 B0E0      		ldi r27,0
+ 710 0292 E0E0      		ldi r30,lo8(gs(1f))
+ 711 0294 F0E0      		ldi r31,hi8(gs(1f))
+ 712 0296 0C94 0000 		jmp __prologue_saves__+((18 - 18) * 2)
+ 713               	1:
+ 714               	/* prologue: function */
+ 715               	/* frame size = 18 */
+ 716               	/* stack size = 36 */
+ 717               	.L__stack_usage = 36
+ 718               	.LBB143:
+ 124:serialparser.c ****     while (ring_read != ring_write){
+ 125:serialparser.c ****         uint8_t command = buffer[ring_read++];
+ 126:serialparser.c ****         if (command == 'P'){ //PUT new values command: P1:20:40    last  angle:tilt
+ 127:serialparser.c ****             uint8_t start = 0;
+ 128:serialparser.c ****             uint8_t stop = 0;
+ 129:serialparser.c ****                 
+ 130:serialparser.c ****             if (buffer[ring_read] == '1'){
+ 131:serialparser.c ****                 if (readAutoManualState() == AUTO){    
+ 132:serialparser.c ****                     uint8_t succ = findParameter(':', ':', '\n', 20, &start, &stop);
+ 133:serialparser.c ****                     if (succ == FIND_SUCCESS){
+ 134:serialparser.c ****                         uint8_t asuccess = setAngle(readFloat(start, stop));
+ 135:serialparser.c ****                         succ = findParameter(':', ':', '\n', 20, &start, &stop);
+ 136:serialparser.c ****                         if (succ == FIND_SUCCESS){
+ 137:serialparser.c ****                             uint8_t tsuccess = setTilt(readFloat(start, stop));
+ 138:serialparser.c ****                             if (asuccess == 0 && tsuccess == 0){
+ 139:serialparser.c ****                                 fprintf_P(port, PSTR("OK\n"));
+ 140:serialparser.c ****                             }
+ 141:serialparser.c ****                             else{
+ 142:serialparser.c ****                                 printerr(); 
+ 143:serialparser.c ****                             }
+ 144:serialparser.c ****                         }
+ 145:serialparser.c ****                         else{
+ 146:serialparser.c ****                             printerr();
+ 147:serialparser.c ****                         }
+ 148:serialparser.c ****                     }
+ 149:serialparser.c ****                     else{
+ 150:serialparser.c ****                         printerr();
+ 151:serialparser.c ****                     }
+ 152:serialparser.c ****                 }
+ 153:serialparser.c ****                 else{
+ 154:serialparser.c ****                     fprintf_P(port, PSTR("MAN\n"));
+ 155:serialparser.c ****                 }
+ 156:serialparser.c ****             }
+ 157:serialparser.c ****             else if (buffer[ring_read] == '2'){
+ 158:serialparser.c ****                 if (readAutoManualState() == AUTO){    
+ 159:serialparser.c ****                     uint8_t succ = findParameter(':', ':', '\n', 20, &start, &stop);
+ 160:serialparser.c ****                     if (succ == FIND_SUCCESS){
+ 161:serialparser.c ****                         uint8_t asuccess = setAngleMotorLength(readInt16(start, stop));
+ 162:serialparser.c ****                         succ = findParameter(':', ':', '\n', 20, &start, &stop);
+ 163:serialparser.c ****                         if (succ == FIND_SUCCESS){
+ 164:serialparser.c ****                             uint8_t tsuccess = setTiltMotorLength(readInt16(start, stop));
+ 165:serialparser.c ****                             if (asuccess == 0 && tsuccess == 0){
+ 166:serialparser.c ****                                 fprintf_P(port, PSTR("OK\n"));
+ 167:serialparser.c ****                             }
+ 168:serialparser.c ****                             else{
+ 169:serialparser.c ****                                 printerr();
+ 170:serialparser.c ****                             }
+ 171:serialparser.c ****                         }
+ 172:serialparser.c ****                     }
+ 173:serialparser.c ****                 }
+ 174:serialparser.c ****                 else{
+ 175:serialparser.c ****                     fprintf_P(port, PSTR("MAN\n"));
+ 176:serialparser.c ****                 }
+ 177:serialparser.c ****             }
+ 178:serialparser.c ****             else if (buffer[ring_read] == '3'){
+ 179:serialparser.c ****                 if (readAutoManualState() == AUTO){ 
+ 180:serialparser.c ****                     //calibrateMotors();
+ 181:serialparser.c ****                 }
+ 182:serialparser.c ****             }
+ 183:serialparser.c ****             else{
+ 184:serialparser.c ****                 printerr();
+ 185:serialparser.c ****             }
+ 186:serialparser.c ****             read_until_line_end();
+ 187:serialparser.c ****         }
+ 188:serialparser.c ****         else if (command == 'G'){ //Get values
+ 189:serialparser.c ****             uint8_t value = buffer[ring_read++]; 
+ 190:serialparser.c ****             if (value == '1'){ //Rread generic info
+ 191:serialparser.c ****                 fprintf(port,"G1:%d\n", SW_VERSION);
+ 192:serialparser.c ****             }
+ 193:serialparser.c ****             else if (value == '2'){ //Read current angle and tilt set_values
+ 194:serialparser.c ****                 fprintf(port,"G2:%5.2f:%5.2f\n", getSetAngle(), getSetTilt());
+ 195:serialparser.c ****             }
+ 196:serialparser.c ****             else if (value == '3'){ //Reads current values from motorctrl -module, actual values
+ 197:serialparser.c ****                 fprintf(port,"G3:%5.2f:%5.2f\n", getAngle(), getTilt());
+ 198:serialparser.c ****             }
+ 199:serialparser.c ****             else if (value == '4'){ //get motor statuses
+ 200:serialparser.c ****                 fprintf(port, "G4:%d:%d\n", getAngleMotorStatus(), getTiltMotorStatus());
+ 201:serialparser.c ****             }
+ 202:serialparser.c ****             else if (value == '5'){
+ 203:serialparser.c ****                 fprintf(port, "G5:%d:%d\n", getAngleActuatorCurrentLength(), getTiltActuatorCurrent
+ 204:serialparser.c ****             }
+ 205:serialparser.c ****             else if (value == '6'){
+ 206:serialparser.c ****                 fprintf(port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTur
+ 207:serialparser.c ****             }
+ 208:serialparser.c ****             else if (value == '7'){
+ 209:serialparser.c ****                 fprintf(port, "G7:%5.2f:%5.2f:%5.2f:%5.2f\n",getAngleMotorMinAngle(), getTiltMotorM
+ 210:serialparser.c ****             }
+ 211:serialparser.c ****             else if (value == '8'){
+ 212:serialparser.c ****                 fprintf(port, "G8:%d:%d\n",getAngleActuatorSetLength(), getTiltActuatorSetLength())
+ 213:serialparser.c ****             }
+ 214:serialparser.c ****             else if (value == '9'){
+ 215:serialparser.c ****                 fprintf(port, "G9:%5.2f:%5.2f\n", getAngleMotorAVGcurrent(), getTiltMotorAVGcurrent
+ 216:serialparser.c ****             }
+ 217:serialparser.c ****             else if (value == 'A'){
+ 218:serialparser.c ****                 fprintf(port, "GA:%5.2f:%5.2f\n", getAngleMotorMoveSpeed(), getTiltMotorMoveSpeed()
+ 219:serialparser.c ****             }
+ 220:serialparser.c ****             else if (value == 'B'){
+ 221:serialparser.c ****                 fprintf(port, "GB:%d:%d\n", getAngleMoveLength(), getTiltMoveLength());
+ 222:serialparser.c ****             }
+ 223:serialparser.c ****             else{
+ 224:serialparser.c ****                 printerr();
+ 225:serialparser.c ****             }
+ 226:serialparser.c ****             read_until_line_end();
+ 227:serialparser.c ****         }
+ 228:serialparser.c ****         else if (command == 'F'){
+ 229:serialparser.c ****             //forceMotors(FORWARD,30);
+ 230:serialparser.c ****             read_until_line_end();
+ 231:serialparser.c ****         }
+ 232:serialparser.c ****         else if (command == 'D'){
+ 233:serialparser.c ****             //forceMotors(BACKWARD,30);
+ 234:serialparser.c ****             read_until_line_end();
+ 235:serialparser.c ****         }
+ 236:serialparser.c ****         else if (command == 'A'){ //ADC read voltage, commands A0\n  A1\n ,A2\n ,A3\n ,A4\n and so 
+ 237:serialparser.c ****             //ring_read++;
+ 238:serialparser.c ****             char buff[2];
+ 239:serialparser.c ****             clearBuffer(buff, 2);
+ 240:serialparser.c ****             buff[0] = buffer[ring_read];
+ 241:serialparser.c ****             uint8_t channel = atoi(buff);
+ 242:serialparser.c ****             if (channel < 8){
+ 243:serialparser.c ****                 fprintf(port, "A%d:%d\n", channel, GetVoltage(channel, 0x40));
+ 244:serialparser.c ****             }
+ 245:serialparser.c ****             else if (channel == 8){
+ 246:serialparser.c ****                 fprintf(port,"A");
+ 247:serialparser.c ****                 for (uint8_t i=0; i<8; i++){
+ 248:serialparser.c ****                     fprintf(port, "%d:%d:", i, GetVoltage(i, 0x40));
+ 249:serialparser.c ****                 }
+ 250:serialparser.c ****                 fprintf(port,"\n");
+ 251:serialparser.c ****             }
+ 252:serialparser.c ****             else{
+ 253:serialparser.c ****                 printerr();
+ 254:serialparser.c ****             }
+ 255:serialparser.c ****             read_until_line_end();
+ 256:serialparser.c ****         }
+ 257:serialparser.c ****         else if (command == 'B'){ //ADC read voltage, commands A0\n  A1\n ,A2\n ,A3\n ,A4
+ 258:serialparser.c ****             char buff[2];
+ 259:serialparser.c ****             clearBuffer(buff, 2);
+ 260:serialparser.c ****             buff[0] = buffer[ring_read];
+ 261:serialparser.c ****             uint8_t channel = atoi(buff);
+ 262:serialparser.c ****             if (channel < 8){
+ 263:serialparser.c ****                 fprintf(port, "B%d:%ld\n", channel, GetOverSampledVoltage(channel, 0x40));
+ 264:serialparser.c ****             }
+ 265:serialparser.c ****             else if (channel == 8){
+ 266:serialparser.c ****                 fprintf(port,"B");
+ 267:serialparser.c ****                 for (uint8_t i=0; i<8; i++){
+ 268:serialparser.c ****                     fprintf(port, "%d:%ld:", i, GetOverSampledVoltage(i, 0x40));
+ 269:serialparser.c ****                 }
+ 270:serialparser.c ****                 fprintf(port,"\n");
+ 271:serialparser.c ****             }
+ 272:serialparser.c ****             else{
+ 273:serialparser.c ****                 printerr();
+ 274:serialparser.c ****             }
+ 275:serialparser.c ****             read_until_line_end();
+ 276:serialparser.c ****         }
+ 277:serialparser.c ****         else if (command == 'S'){ //Read both motor status
+ 278:serialparser.c ****             fprintf(port,"S:%d:%d\n",getAngleMotorStatus(), getTiltMotorStatus());
+ 720               	.LM65:
+ 721 029a 80E0      		ldi r24,lo8(.LC15)
+ 722 029c 482E      		mov r4,r24
+ 723 029e 80E0      		ldi r24,hi8(.LC15)
+ 724 02a0 582E      		mov r5,r24
+ 725               	.LBB144:
+ 261:serialparser.c ****             if (channel < 8){
+ 727               	.LM66:
+ 728 02a2 9E01      		movw r18,r28
+ 729 02a4 2F5F      		subi r18,-1
+ 730 02a6 3F4F      		sbci r19,-1
+ 731 02a8 5901      		movw r10,r18
+ 732               	.LBB145:
+ 733               	.LBB146:
+ 120:serialparser.c **** }
+ 735               	.LM67:
+ 736 02aa 00E0      		ldi r16,lo8(__c.2498)
+ 737 02ac 10E0      		ldi r17,hi8(__c.2498)
+ 738               	.LBE146:
+ 739               	.LBE145:
+ 740               	.LBB148:
+ 268:serialparser.c ****                 }
+ 742               	.LM68:
+ 743 02ae 90E0      		ldi r25,lo8(.LC14)
+ 744 02b0 C92E      		mov r12,r25
+ 745 02b2 90E0      		ldi r25,hi8(.LC14)
+ 746 02b4 D92E      		mov r13,r25
+ 747               	.LBE148:
+ 748               	.LBE144:
+ 749               	.LBB155:
+ 750               	.LBB156:
+ 248:serialparser.c ****                 }
+ 752               	.LM69:
+ 753 02b6 20E0      		ldi r18,lo8(.LC12)
+ 754 02b8 E22E      		mov r14,r18
+ 755 02ba 20E0      		ldi r18,hi8(.LC12)
+ 756 02bc F22E      		mov r15,r18
+ 757               	.LBE156:
+ 243:serialparser.c ****             }
+ 759               	.LM70:
+ 760 02be 30E0      		ldi r19,lo8(.LC11)
+ 761 02c0 232E      		mov r2,r19
+ 762 02c2 30E0      		ldi r19,hi8(.LC11)
+ 763 02c4 332E      		mov r3,r19
+ 764               	.L46:
+ 765               	.LBE155:
+ 766               	.LBE143:
+ 124:serialparser.c ****         uint8_t command = buffer[ring_read++];
+ 768               	.LM71:
+ 769 02c6 9091 0000 		lds r25,ring_read
+ 770 02ca 8091 0000 		lds r24,ring_write
+ 771 02ce 9817      		cp r25,r24
+ 772 02d0 01F4      		brne .+2
+ 773 02d2 00C0      		rjmp .L341
+ 774               	.L130:
+ 775               	.LBB236:
+ 125:serialparser.c ****         if (command == 'P'){ //PUT new values command: P1:20:40    last  angle:tilt
+ 777               	.LM72:
+ 778 02d4 E091 0000 		lds r30,ring_read
+ 779 02d8 81E0      		ldi r24,lo8(1)
+ 780 02da 8E0F      		add r24,r30
+ 781 02dc 8093 0000 		sts ring_read,r24
+ 782 02e0 F0E0      		ldi r31,0
+ 783 02e2 E050      		subi r30,lo8(-(buffer))
+ 784 02e4 F040      		sbci r31,hi8(-(buffer))
+ 785 02e6 8081      		ld r24,Z
+ 126:serialparser.c ****             uint8_t start = 0;
+ 787               	.LM73:
+ 788 02e8 8035      		cpi r24,lo8(80)
+ 789 02ea 01F4      		brne .+2
+ 790 02ec 00C0      		rjmp .L342
+ 188:serialparser.c ****             uint8_t value = buffer[ring_read++]; 
+ 792               	.LM74:
+ 793 02ee 8734      		cpi r24,lo8(71)
+ 794 02f0 01F4      		brne .+2
+ 795 02f2 00C0      		rjmp .L343
+ 228:serialparser.c ****             //forceMotors(FORWARD,30);
+ 797               	.LM75:
+ 798 02f4 8634      		cpi r24,lo8(70)
+ 799 02f6 01F4      		brne .+2
+ 800 02f8 00C0      		rjmp .L327
+ 232:serialparser.c ****             //forceMotors(BACKWARD,30);
+ 802               	.LM76:
+ 803 02fa 8434      		cpi r24,lo8(68)
+ 804 02fc 01F4      		brne .+2
+ 805 02fe 00C0      		rjmp .L329
+ 236:serialparser.c ****             //ring_read++;
+ 807               	.LM77:
+ 808 0300 8134      		cpi r24,lo8(65)
+ 809 0302 01F4      		brne .+2
+ 810 0304 00C0      		rjmp .L344
+ 257:serialparser.c ****             char buff[2];
+ 812               	.LM78:
+ 813 0306 8234      		cpi r24,lo8(66)
+ 814 0308 01F4      		brne .+2
+ 815 030a 00C0      		rjmp .L345
+ 277:serialparser.c ****             fprintf(port,"S:%d:%d\n",getAngleMotorStatus(), getTiltMotorStatus());
+ 817               	.LM79:
+ 818 030c 8335      		cpi r24,lo8(83)
+ 819 030e 01F4      		brne .L46
+ 821               	.LM80:
+ 822 0310 0E94 0000 		call getTiltMotorStatus
+ 823 0314 982E      		mov r9,r24
+ 824 0316 0E94 0000 		call getAngleMotorStatus
+ 825 031a 1F92      		push __zero_reg__
+ 826 031c 9F92      		push r9
+ 827 031e 1F92      		push __zero_reg__
+ 828 0320 8F93      		push r24
+ 829 0322 5F92      		push r5
+ 830 0324 4F92      		push r4
+ 831 0326 8091 0000 		lds r24,port+1
+ 832 032a 8F93      		push r24
+ 833 032c 8091 0000 		lds r24,port
+ 834 0330 8F93      		push r24
+ 835 0332 0E94 0000 		call fprintf
+ 836               	.LBB164:
+ 837               	.LBB165:
+  43:serialparser.c ****         ring_read++;
+ 839               	.LM81:
+ 840 0336 E091 0000 		lds r30,ring_read
+ 841 033a F0E0      		ldi r31,0
+ 842 033c E050      		subi r30,lo8(-(buffer))
+ 843 033e F040      		sbci r31,hi8(-(buffer))
+ 844 0340 8081      		ld r24,Z
+ 845 0342 0FB6      		in __tmp_reg__,__SREG__
+ 846 0344 F894      		cli
+ 847 0346 DEBF      		out __SP_H__,r29
+ 848 0348 0FBE      		out __SREG__,__tmp_reg__
+ 849 034a CDBF      		out __SP_L__,r28
+ 850 034c 8A30      		cpi r24,lo8(10)
+ 851 034e 01F4      		brne .L325
+ 852 0350 00C0      		rjmp .L46
+ 853               	.L346:
+ 854 0352 9091 0000 		lds r25,ring_read
+ 855 0356 8091 0000 		lds r24,ring_write
+ 856 035a 9817      		cp r25,r24
+ 857 035c 01F4      		brne .+2
+ 858 035e 00C0      		rjmp .L46
+  44:serialparser.c ****     }
+ 860               	.LM82:
+ 861 0360 8091 0000 		lds r24,ring_read
+ 862 0364 8F5F      		subi r24,lo8(-(1))
+ 863 0366 8093 0000 		sts ring_read,r24
+  43:serialparser.c ****         ring_read++;
+ 865               	.LM83:
+ 866 036a E091 0000 		lds r30,ring_read
+ 867 036e F0E0      		ldi r31,0
+ 868 0370 E050      		subi r30,lo8(-(buffer))
+ 869 0372 F040      		sbci r31,hi8(-(buffer))
+ 870 0374 8081      		ld r24,Z
+ 871 0376 8A30      		cpi r24,lo8(10)
+ 872 0378 01F4      		brne .+2
+ 873 037a 00C0      		rjmp .L46
+ 874               	.L325:
+ 875 037c E091 0000 		lds r30,ring_read
+ 876 0380 F0E0      		ldi r31,0
+ 877 0382 E050      		subi r30,lo8(-(buffer))
+ 878 0384 F040      		sbci r31,hi8(-(buffer))
+ 879 0386 8081      		ld r24,Z
+ 880 0388 8D30      		cpi r24,lo8(13)
+ 881 038a 01F4      		brne .L346
+ 882 038c 00C0      		rjmp .L46
+ 883               	.L347:
+ 884               	.LBE165:
+ 885               	.LBE164:
+ 886               	.LBB166:
+ 887               	.LBB167:
+ 888 038e E091 0000 		lds r30,ring_read
+ 889 0392 F0E0      		ldi r31,0
+ 890 0394 E050      		subi r30,lo8(-(buffer))
+ 891 0396 F040      		sbci r31,hi8(-(buffer))
+ 892 0398 8081      		ld r24,Z
+ 893 039a 8D30      		cpi r24,lo8(13)
+ 894 039c 01F4      		brne .+2
+ 895 039e 00C0      		rjmp .L46
+ 896 03a0 9091 0000 		lds r25,ring_read
+ 897 03a4 8091 0000 		lds r24,ring_write
+ 898 03a8 9817      		cp r25,r24
+ 899 03aa 01F4      		brne .+2
+ 900 03ac 00C0      		rjmp .L46
+  44:serialparser.c ****     }
+ 902               	.LM84:
+ 903 03ae 8091 0000 		lds r24,ring_read
+ 904 03b2 8F5F      		subi r24,lo8(-(1))
+ 905 03b4 8093 0000 		sts ring_read,r24
+ 906               	.L327:
+  43:serialparser.c ****         ring_read++;
+ 908               	.LM85:
+ 909 03b8 E091 0000 		lds r30,ring_read
+ 910 03bc F0E0      		ldi r31,0
+ 911 03be E050      		subi r30,lo8(-(buffer))
+ 912 03c0 F040      		sbci r31,hi8(-(buffer))
+ 913 03c2 8081      		ld r24,Z
+ 914 03c4 8A30      		cpi r24,lo8(10)
+ 915 03c6 01F4      		brne .L347
+ 916               	.LBE167:
+ 917               	.LBE166:
+ 918               	.LBE236:
+ 124:serialparser.c ****         uint8_t command = buffer[ring_read++];
+ 920               	.LM86:
+ 921 03c8 9091 0000 		lds r25,ring_read
+ 922 03cc 8091 0000 		lds r24,ring_write
+ 923 03d0 9813      		cpse r25,r24
+ 924 03d2 00C0      		rjmp .L130
+ 925               	.L341:
+ 926               	/* epilogue start */
+ 279:serialparser.c ****             read_until_line_end();    
+ 280:serialparser.c ****         }
+ 281:serialparser.c ****     }
+ 282:serialparser.c **** }
+ 928               	.LM87:
+ 929 03d4 6296      		adiw r28,18
+ 930 03d6 E2E1      		ldi r30, lo8(18)
+ 931 03d8 0C94 0000 		jmp __epilogue_restores__ + ((18 - 18) * 2)
+ 932               	.L348:
+ 933               	.LBB237:
+ 934               	.LBB168:
+ 935               	.LBB169:
+  43:serialparser.c ****         ring_read++;
+ 937               	.LM88:
+ 938 03dc E091 0000 		lds r30,ring_read
+ 939 03e0 F0E0      		ldi r31,0
+ 940 03e2 E050      		subi r30,lo8(-(buffer))
+ 941 03e4 F040      		sbci r31,hi8(-(buffer))
+ 942 03e6 8081      		ld r24,Z
+ 943 03e8 8D30      		cpi r24,lo8(13)
+ 944 03ea 01F4      		brne .+2
+ 945 03ec 00C0      		rjmp .L46
+ 946 03ee 9091 0000 		lds r25,ring_read
+ 947 03f2 8091 0000 		lds r24,ring_write
+ 948 03f6 9817      		cp r25,r24
+ 949 03f8 01F4      		brne .+2
+ 950 03fa 00C0      		rjmp .L46
+  44:serialparser.c ****     }
+ 952               	.LM89:
+ 953 03fc 8091 0000 		lds r24,ring_read
+ 954 0400 8F5F      		subi r24,lo8(-(1))
+ 955 0402 8093 0000 		sts ring_read,r24
+ 956               	.L329:
+  43:serialparser.c ****         ring_read++;
+ 958               	.LM90:
+ 959 0406 E091 0000 		lds r30,ring_read
+ 960 040a F0E0      		ldi r31,0
+ 961 040c E050      		subi r30,lo8(-(buffer))
+ 962 040e F040      		sbci r31,hi8(-(buffer))
+ 963 0410 8081      		ld r24,Z
+ 964 0412 8A30      		cpi r24,lo8(10)
+ 965 0414 01F4      		brne .L348
+ 966 0416 00C0      		rjmp .L46
+ 967               	.L342:
+ 968               	.LBE169:
+ 969               	.LBE168:
+ 970               	.LBB170:
+ 130:serialparser.c ****                 if (readAutoManualState() == AUTO){    
+ 972               	.LM91:
+ 973 0418 E091 0000 		lds r30,ring_read
+ 974 041c F0E0      		ldi r31,0
+ 975 041e E050      		subi r30,lo8(-(buffer))
+ 976 0420 F040      		sbci r31,hi8(-(buffer))
+ 977 0422 8081      		ld r24,Z
+ 978 0424 8133      		cpi r24,lo8(49)
+ 979 0426 01F4      		brne .+2
+ 980 0428 00C0      		rjmp .L349
+ 157:serialparser.c ****                 if (readAutoManualState() == AUTO){    
+ 982               	.LM92:
+ 983 042a E091 0000 		lds r30,ring_read
+ 984 042e F0E0      		ldi r31,0
+ 985 0430 E050      		subi r30,lo8(-(buffer))
+ 986 0432 F040      		sbci r31,hi8(-(buffer))
+ 987 0434 8081      		ld r24,Z
+ 988 0436 8233      		cpi r24,lo8(50)
+ 989 0438 01F4      		brne .+2
+ 990 043a 00C0      		rjmp .L350
+ 178:serialparser.c ****                 if (readAutoManualState() == AUTO){ 
+ 992               	.LM93:
+ 993 043c E091 0000 		lds r30,ring_read
+ 994 0440 F0E0      		ldi r31,0
+ 995 0442 E050      		subi r30,lo8(-(buffer))
+ 996 0444 F040      		sbci r31,hi8(-(buffer))
+ 997 0446 8081      		ld r24,Z
+ 998 0448 8333      		cpi r24,lo8(51)
+ 999 044a 01F4      		brne .+2
+ 1000 044c 00C0      		rjmp .L351
+ 1001               	.L60:
+ 1002               	.LBB171:
+ 1003               	.LBB172:
+ 1004               	.LBB173:
+ 1005               	.LBB174:
+ 120:serialparser.c **** }
+ 1007               	.LM94:
+ 1008 044e 1F93      		push r17
+ 1009 0450 0F93      		push r16
+ 1010               	.L292:
+ 1011               	.LBE174:
+ 1012               	.LBE173:
+ 1013               	.LBE172:
+ 1014               	.LBE171:
+ 1015               	.LBB191:
+ 1016               	.LBB192:
+ 1017               	.LBB193:
+ 166:serialparser.c ****                             }
+ 1019               	.LM95:
+ 1020 0452 8091 0000 		lds r24,port+1
+ 1021 0456 8F93      		push r24
+ 1022 0458 8091 0000 		lds r24,port
+ 1023 045c 8F93      		push r24
+ 1024 045e 0E94 0000 		call fprintf_P
+ 1025 0462 0F90      		pop __tmp_reg__
+ 1026 0464 0F90      		pop __tmp_reg__
+ 1027 0466 0F90      		pop __tmp_reg__
+ 1028 0468 0F90      		pop __tmp_reg__
+ 1029 046a 00C0      		rjmp .L313
+ 1030               	.L352:
+ 1031               	.LBE193:
+ 1032               	.LBE192:
+ 1033               	.LBE191:
+ 1034               	.LBB212:
+ 1035               	.LBB213:
+  43:serialparser.c ****         ring_read++;
+ 1037               	.LM96:
+ 1038 046c E091 0000 		lds r30,ring_read
+ 1039 0470 F0E0      		ldi r31,0
+ 1040 0472 E050      		subi r30,lo8(-(buffer))
+ 1041 0474 F040      		sbci r31,hi8(-(buffer))
+ 1042 0476 8081      		ld r24,Z
+ 1043 0478 8D30      		cpi r24,lo8(13)
+ 1044 047a 01F4      		brne .+2
+ 1045 047c 00C0      		rjmp .L46
+ 1046 047e 9091 0000 		lds r25,ring_read
+ 1047 0482 8091 0000 		lds r24,ring_write
+ 1048 0486 9817      		cp r25,r24
+ 1049 0488 01F4      		brne .+2
+ 1050 048a 00C0      		rjmp .L46
+  44:serialparser.c ****     }
+ 1052               	.LM97:
+ 1053 048c 8091 0000 		lds r24,ring_read
+ 1054 0490 8F5F      		subi r24,lo8(-(1))
+ 1055 0492 8093 0000 		sts ring_read,r24
+ 1056               	.L313:
+  43:serialparser.c ****         ring_read++;
+ 1058               	.LM98:
+ 1059 0496 E091 0000 		lds r30,ring_read
+ 1060 049a F0E0      		ldi r31,0
+ 1061 049c E050      		subi r30,lo8(-(buffer))
+ 1062 049e F040      		sbci r31,hi8(-(buffer))
+ 1063 04a0 8081      		ld r24,Z
+ 1064 04a2 8A30      		cpi r24,lo8(10)
+ 1065 04a4 01F4      		brne .L352
+ 1066 04a6 00C0      		rjmp .L46
+ 1067               	.L343:
+ 1068               	.LBE213:
+ 1069               	.LBE212:
+ 1070               	.LBE170:
+ 1071               	.LBB217:
+ 189:serialparser.c ****             if (value == '1'){ //Rread generic info
+ 1073               	.LM99:
+ 1074 04a8 E091 0000 		lds r30,ring_read
+ 1075 04ac 81E0      		ldi r24,lo8(1)
+ 1076 04ae 8E0F      		add r24,r30
+ 1077 04b0 8093 0000 		sts ring_read,r24
+ 1078 04b4 F0E0      		ldi r31,0
+ 1079 04b6 E050      		subi r30,lo8(-(buffer))
+ 1080 04b8 F040      		sbci r31,hi8(-(buffer))
+ 1081 04ba 8081      		ld r24,Z
+ 190:serialparser.c ****                 fprintf(port,"G1:%d\n", SW_VERSION);
+ 1083               	.LM100:
+ 1084 04bc 8133      		cpi r24,lo8(49)
+ 1085 04be 01F4      		brne .+2
+ 1086 04c0 00C0      		rjmp .L353
+ 193:serialparser.c ****                 fprintf(port,"G2:%5.2f:%5.2f\n", getSetAngle(), getSetTilt());
+ 1088               	.LM101:
+ 1089 04c2 8233      		cpi r24,lo8(50)
+ 1090 04c4 01F4      		brne .+2
+ 1091 04c6 00C0      		rjmp .L354
+ 196:serialparser.c ****                 fprintf(port,"G3:%5.2f:%5.2f\n", getAngle(), getTilt());
+ 1093               	.LM102:
+ 1094 04c8 8333      		cpi r24,lo8(51)
+ 1095 04ca 01F4      		brne .+2
+ 1096 04cc 00C0      		rjmp .L355
+ 199:serialparser.c ****                 fprintf(port, "G4:%d:%d\n", getAngleMotorStatus(), getTiltMotorStatus());
+ 1098               	.LM103:
+ 1099 04ce 8433      		cpi r24,lo8(52)
+ 1100 04d0 01F4      		brne .+2
+ 1101 04d2 00C0      		rjmp .L356
+ 202:serialparser.c ****                 fprintf(port, "G5:%d:%d\n", getAngleActuatorCurrentLength(), getTiltActuatorCurrent
+ 1103               	.LM104:
+ 1104 04d4 8533      		cpi r24,lo8(53)
+ 1105 04d6 01F4      		brne .+2
+ 1106 04d8 00C0      		rjmp .L357
+ 205:serialparser.c ****                 fprintf(port, "G6:%d:%d:%d\n",readAutoManualState(), readTiltButtonState(), readTur
+ 1108               	.LM105:
+ 1109 04da 8633      		cpi r24,lo8(54)
+ 1110 04dc 01F4      		brne .+2
+ 1111 04de 00C0      		rjmp .L358
+ 208:serialparser.c ****                 fprintf(port, "G7:%5.2f:%5.2f:%5.2f:%5.2f\n",getAngleMotorMinAngle(), getTiltMotorM
+ 1113               	.LM106:
+ 1114 04e0 8733      		cpi r24,lo8(55)
+ 1115 04e2 01F4      		brne .+2
+ 1116 04e4 00C0      		rjmp .L359
+ 211:serialparser.c ****                 fprintf(port, "G8:%d:%d\n",getAngleActuatorSetLength(), getTiltActuatorSetLength())
+ 1118               	.LM107:
+ 1119 04e6 8833      		cpi r24,lo8(56)
+ 1120 04e8 01F4      		brne .+2
+ 1121 04ea 00C0      		rjmp .L360
+ 214:serialparser.c ****                 fprintf(port, "G9:%5.2f:%5.2f\n", getAngleMotorAVGcurrent(), getTiltMotorAVGcurrent
+ 1123               	.LM108:
+ 1124 04ec 8933      		cpi r24,lo8(57)
+ 1125 04ee 01F4      		brne .+2
+ 1126 04f0 00C0      		rjmp .L361
+ 217:serialparser.c ****                 fprintf(port, "GA:%5.2f:%5.2f\n", getAngleMotorMoveSpeed(), getTiltMotorMoveSpeed()
+ 1128               	.LM109:
+ 1129 04f2 8134      		cpi r24,lo8(65)
+ 1130 04f4 01F4      		brne .+2
+ 1131 04f6 00C0      		rjmp .L362
+ 220:serialparser.c ****                 fprintf(port, "GB:%d:%d\n", getAngleMoveLength(), getTiltMoveLength());
+ 1133               	.LM110:
+ 1134 04f8 8234      		cpi r24,lo8(66)
+ 1135 04fa 01F4      		brne .+2
+ 1136 04fc 00C0      		rjmp .L363
+ 1137               	.LBB218:
+ 1138               	.LBB219:
+ 120:serialparser.c **** }
+ 1140               	.LM111:
+ 1141 04fe 1F93      		push r17
+ 1142 0500 0F93      		push r16
+ 1143 0502 8091 0000 		lds r24,port+1
+ 1144 0506 8F93      		push r24
+ 1145 0508 8091 0000 		lds r24,port
+ 1146 050c 8F93      		push r24
+ 1147 050e 0E94 0000 		call fprintf_P
+ 1148 0512 0F90      		pop __tmp_reg__
+ 1149 0514 0F90      		pop __tmp_reg__
+ 1150 0516 0F90      		pop __tmp_reg__
+ 1151 0518 0F90      		pop __tmp_reg__
+ 1152 051a 00C0      		rjmp .L315
+ 1153               	.L364:
+ 1154               	.LBE219:
+ 1155               	.LBE218:
+ 1156               	.LBB220:
+ 1157               	.LBB221:
+  43:serialparser.c ****         ring_read++;
+ 1159               	.LM112:
+ 1160 051c E091 0000 		lds r30,ring_read
+ 1161 0520 F0E0      		ldi r31,0
+ 1162 0522 E050      		subi r30,lo8(-(buffer))
+ 1163 0524 F040      		sbci r31,hi8(-(buffer))
+ 1164 0526 8081      		ld r24,Z
+ 1165 0528 8D30      		cpi r24,lo8(13)
+ 1166 052a 01F4      		brne .+2
+ 1167 052c 00C0      		rjmp .L46
+ 1168 052e 9091 0000 		lds r25,ring_read
+ 1169 0532 8091 0000 		lds r24,ring_write
+ 1170 0536 9817      		cp r25,r24
+ 1171 0538 01F4      		brne .+2
+ 1172 053a 00C0      		rjmp .L46
+  44:serialparser.c ****     }
+ 1174               	.LM113:
+ 1175 053c 8091 0000 		lds r24,ring_read
+ 1176 0540 8F5F      		subi r24,lo8(-(1))
+ 1177 0542 8093 0000 		sts ring_read,r24
+ 1178               	.L315:
+  43:serialparser.c ****         ring_read++;
+ 1180               	.LM114:
+ 1181 0546 E091 0000 		lds r30,ring_read
+ 1182 054a F0E0      		ldi r31,0
+ 1183 054c E050      		subi r30,lo8(-(buffer))
+ 1184 054e F040      		sbci r31,hi8(-(buffer))
+ 1185 0550 8081      		ld r24,Z
+ 1186 0552 8A30      		cpi r24,lo8(10)
+ 1187 0554 01F4      		brne .L364
+ 1188 0556 00C0      		rjmp .L46
+ 1189               	.L344:
+ 1190               	.LBE221:
+ 1191               	.LBE220:
+ 1192               	.LBE217:
+ 1193               	.LBB222:
+ 1194               	.LBB157:
+ 1195               	.LBB158:
+  27:serialparser.c **** }
+ 1197               	.LM115:
+ 1198 0558 1982      		std Y+1,__zero_reg__
+ 1199 055a 1A82      		std Y+2,__zero_reg__
+ 1200               	.LBE158:
+ 1201               	.LBE157:
+ 240:serialparser.c ****             uint8_t channel = atoi(buff);
+ 1203               	.LM116:
+ 1204 055c E091 0000 		lds r30,ring_read
+ 1205 0560 F0E0      		ldi r31,0
+ 1206 0562 E050      		subi r30,lo8(-(buffer))
+ 1207 0564 F040      		sbci r31,hi8(-(buffer))
+ 1208 0566 8081      		ld r24,Z
+ 1209 0568 8983      		std Y+1,r24
+ 241:serialparser.c ****             if (channel < 8){
+ 1211               	.LM117:
+ 1212 056a C501      		movw r24,r10
+ 1213 056c 0E94 0000 		call atoi
+ 1214 0570 4C01      		movw r8,r24
+ 242:serialparser.c ****                 fprintf(port, "A%d:%d\n", channel, GetVoltage(channel, 0x40));
+ 1216               	.LM118:
+ 1217 0572 8830      		cpi r24,lo8(8)
+ 1218 0574 00F4      		brsh .+2
+ 1219 0576 00C0      		rjmp .L365
+ 245:serialparser.c ****                 fprintf(port,"A");
+ 1221               	.LM119:
+ 1222 0578 8830      		cpi r24,lo8(8)
+ 1223 057a 01F4      		brne .+2
+ 1224 057c 00C0      		rjmp .L366
+ 1225               	.LBB159:
+ 1226               	.LBB160:
+ 120:serialparser.c **** }
+ 1228               	.LM120:
+ 1229 057e 1F93      		push r17
+ 1230 0580 0F93      		push r16
+ 1231 0582 8091 0000 		lds r24,port+1
+ 1232 0586 8F93      		push r24
+ 1233 0588 8091 0000 		lds r24,port
+ 1234 058c 8F93      		push r24
+ 1235 058e 0E94 0000 		call fprintf_P
+ 1236 0592 0F90      		pop __tmp_reg__
+ 1237 0594 0F90      		pop __tmp_reg__
+ 1238 0596 0F90      		pop __tmp_reg__
+ 1239 0598 0F90      		pop __tmp_reg__
+ 1240 059a 00C0      		rjmp .L115
+ 1241               	.L367:
+ 1242               	.LBE160:
+ 1243               	.LBE159:
+ 1244               	.LBB161:
+ 1245               	.LBB162:
+  43:serialparser.c ****         ring_read++;
+ 1247               	.LM121:
+ 1248 059c E091 0000 		lds r30,ring_read
+ 1249 05a0 F0E0      		ldi r31,0
+ 1250 05a2 E050      		subi r30,lo8(-(buffer))
+ 1251 05a4 F040      		sbci r31,hi8(-(buffer))
+ 1252 05a6 8081      		ld r24,Z
+ 1253 05a8 8D30      		cpi r24,lo8(13)
+ 1254 05aa 01F4      		brne .+2
+ 1255 05ac 00C0      		rjmp .L46
+ 1256 05ae 9091 0000 		lds r25,ring_read
+ 1257 05b2 8091 0000 		lds r24,ring_write
+ 1258 05b6 9817      		cp r25,r24
+ 1259 05b8 01F4      		brne .+2
+ 1260 05ba 00C0      		rjmp .L46
+  44:serialparser.c ****     }
+ 1262               	.LM122:
+ 1263 05bc 8091 0000 		lds r24,ring_read
+ 1264 05c0 8F5F      		subi r24,lo8(-(1))
+ 1265 05c2 8093 0000 		sts ring_read,r24
+ 1266               	.L115:
+  43:serialparser.c ****         ring_read++;
+ 1268               	.LM123:
+ 1269 05c6 E091 0000 		lds r30,ring_read
+ 1270 05ca F0E0      		ldi r31,0
+ 1271 05cc E050      		subi r30,lo8(-(buffer))
+ 1272 05ce F040      		sbci r31,hi8(-(buffer))
+ 1273 05d0 8081      		ld r24,Z
+ 1274 05d2 8A30      		cpi r24,lo8(10)
+ 1275 05d4 01F4      		brne .L367
+ 1276 05d6 00C0      		rjmp .L46
+ 1277               	.L345:
+ 1278               	.LBE162:
+ 1279               	.LBE161:
+ 1280               	.LBE222:
+ 1281               	.LBB223:
+ 1282               	.LBB149:
+ 1283               	.LBB150:
+  27:serialparser.c **** }
+ 1285               	.LM124:
+ 1286 05d8 1982      		std Y+1,__zero_reg__
+ 1287 05da 1A82      		std Y+2,__zero_reg__
+ 1288               	.LBE150:
+ 1289               	.LBE149:
+ 260:serialparser.c ****             uint8_t channel = atoi(buff);
+ 1291               	.LM125:
+ 1292 05dc E091 0000 		lds r30,ring_read
+ 1293 05e0 F0E0      		ldi r31,0
+ 1294 05e2 E050      		subi r30,lo8(-(buffer))
+ 1295 05e4 F040      		sbci r31,hi8(-(buffer))
+ 1296 05e6 8081      		ld r24,Z
+ 1297 05e8 8983      		std Y+1,r24
+ 261:serialparser.c ****             if (channel < 8){
+ 1299               	.LM126:
+ 1300 05ea C501      		movw r24,r10
+ 1301 05ec 0E94 0000 		call atoi
+ 1302 05f0 4C01      		movw r8,r24
+ 262:serialparser.c ****                 fprintf(port, "B%d:%ld\n", channel, GetOverSampledVoltage(channel, 0x40));
+ 1304               	.LM127:
+ 1305 05f2 8830      		cpi r24,lo8(8)
+ 1306 05f4 00F4      		brsh .+2
+ 1307 05f6 00C0      		rjmp .L368
+ 265:serialparser.c ****                 fprintf(port,"B");
+ 1309               	.LM128:
+ 1310 05f8 8830      		cpi r24,lo8(8)
+ 1311 05fa 01F4      		brne .+2
+ 1312 05fc 00C0      		rjmp .L369
+ 1313               	.LBB151:
+ 1314               	.LBB147:
+ 120:serialparser.c **** }
+ 1316               	.LM129:
+ 1317 05fe 1F93      		push r17
+ 1318 0600 0F93      		push r16
+ 1319 0602 8091 0000 		lds r24,port+1
+ 1320 0606 8F93      		push r24
+ 1321 0608 8091 0000 		lds r24,port
+ 1322 060c 8F93      		push r24
+ 1323 060e 0E94 0000 		call fprintf_P
+ 1324 0612 0F90      		pop __tmp_reg__
+ 1325 0614 0F90      		pop __tmp_reg__
+ 1326 0616 0F90      		pop __tmp_reg__
+ 1327 0618 0F90      		pop __tmp_reg__
+ 1328 061a 00C0      		rjmp .L123
+ 1329               	.L370:
+ 1330               	.LBE147:
+ 1331               	.LBE151:
+ 1332               	.LBB152:
+ 1333               	.LBB153:
+  43:serialparser.c ****         ring_read++;
+ 1335               	.LM130:
+ 1336 061c E091 0000 		lds r30,ring_read
+ 1337 0620 F0E0      		ldi r31,0
+ 1338 0622 E050      		subi r30,lo8(-(buffer))
+ 1339 0624 F040      		sbci r31,hi8(-(buffer))
+ 1340 0626 8081      		ld r24,Z
+ 1341 0628 8D30      		cpi r24,lo8(13)
+ 1342 062a 01F4      		brne .+2
+ 1343 062c 00C0      		rjmp .L46
+ 1344 062e 9091 0000 		lds r25,ring_read
+ 1345 0632 8091 0000 		lds r24,ring_write
+ 1346 0636 9817      		cp r25,r24
+ 1347 0638 01F4      		brne .+2
+ 1348 063a 00C0      		rjmp .L46
+  44:serialparser.c ****     }
+ 1350               	.LM131:
+ 1351 063c 8091 0000 		lds r24,ring_read
+ 1352 0640 8F5F      		subi r24,lo8(-(1))
+ 1353 0642 8093 0000 		sts ring_read,r24
+ 1354               	.L123:
+  43:serialparser.c ****         ring_read++;
+ 1356               	.LM132:
+ 1357 0646 E091 0000 		lds r30,ring_read
+ 1358 064a F0E0      		ldi r31,0
+ 1359 064c E050      		subi r30,lo8(-(buffer))
+ 1360 064e F040      		sbci r31,hi8(-(buffer))
+ 1361 0650 8081      		ld r24,Z
+ 1362 0652 8A30      		cpi r24,lo8(10)
+ 1363 0654 01F4      		brne .L370
+ 1364 0656 00C0      		rjmp .L46
+ 1365               	.L351:
+ 1366               	.LBE153:
+ 1367               	.LBE152:
+ 1368               	.LBE223:
+ 1369               	.LBB224:
+ 179:serialparser.c ****                     //calibrateMotors();
+ 1371               	.LM133:
+ 1372 0658 0E94 0000 		call readAutoManualState
+ 1373 065c 00C0      		rjmp .L313
+ 1374               	.L349:
+ 131:serialparser.c ****                     uint8_t succ = findParameter(':', ':', '\n', 20, &start, &stop);
+ 1376               	.LM134:
+ 1377 065e 0E94 0000 		call readAutoManualState
+ 1378 0662 8130      		cpi r24,lo8(1)
+ 1379 0664 01F4      		brne .+2
+ 1380 0666 00C0      		rjmp .L371
+ 154:serialparser.c ****                 }
+ 1382               	.LM135:
+ 1383 0668 80E0      		ldi r24,lo8(__c.2511)
+ 1384 066a 90E0      		ldi r25,hi8(__c.2511)
+ 1385               	.L293:
+ 1386               	.LBB214:
+ 1387               	.LBB206:
+ 1388               	.LBB197:
+ 166:serialparser.c ****                             }
+ 1390               	.LM136:
+ 1391 066c 9F93      		push r25
+ 1392 066e 8F93      		push r24
+ 1393 0670 00C0      		rjmp .L292
+ 1394               	.L350:
+ 1395               	.LBE197:
+ 1396               	.LBE206:
+ 1397               	.LBE214:
+ 158:serialparser.c ****                     uint8_t succ = findParameter(':', ':', '\n', 20, &start, &stop);
+ 1399               	.LM137:
+ 1400 0672 0E94 0000 		call readAutoManualState
+ 1401 0676 8130      		cpi r24,lo8(1)
+ 1402 0678 01F4      		brne .+2
+ 1403 067a 00C0      		rjmp .L372
+ 175:serialparser.c ****                 }
+ 1405               	.LM138:
+ 1406 067c 80E0      		ldi r24,lo8(__c.2518)
+ 1407 067e 90E0      		ldi r25,hi8(__c.2518)
+ 1408 0680 9F93      		push r25
+ 1409 0682 8F93      		push r24
+ 1410 0684 00C0      		rjmp .L292
+ 1411               	.L365:
+ 1412               	.LBE224:
+ 1413               	.LBB225:
+ 243:serialparser.c ****             }
+ 1415               	.LM139:
+ 1416 0686 60E4      		ldi r22,lo8(64)
+ 1417 0688 0E94 0000 		call GetVoltage
+ 1418 068c 9F93      		push r25
+ 1419 068e 8F93      		push r24
+ 1420 0690 9924      		clr r9
+ 1421 0692 9F92      		push r9
+ 1422 0694 8F92      		push r8
+ 1423 0696 3F92      		push r3
+ 1424 0698 2F92      		push r2
+ 1425 069a 8091 0000 		lds r24,port+1
+ 1426 069e 8F93      		push r24
+ 1427 06a0 8091 0000 		lds r24,port
+ 1428 06a4 8F93      		push r24
+ 1429 06a6 0E94 0000 		call fprintf
+ 1430 06aa 0FB6      		in __tmp_reg__,__SREG__
+ 1431 06ac F894      		cli
+ 1432 06ae DEBF      		out __SP_H__,r29
+ 1433 06b0 0FBE      		out __SREG__,__tmp_reg__
+ 1434 06b2 CDBF      		out __SP_L__,r28
+ 1435 06b4 00C0      		rjmp .L115
+ 1436               	.L353:
+ 1437               	.LBE225:
+ 1438               	.LBB226:
+ 191:serialparser.c ****             }
+ 1440               	.LM140:
+ 1441 06b6 1F92      		push __zero_reg__
+ 1442 06b8 81E0      		ldi r24,lo8(1)
+ 1443 06ba 8F93      		push r24
+ 1444 06bc 80E0      		ldi r24,lo8(.LC0)
+ 1445 06be 90E0      		ldi r25,hi8(.LC0)
+ 1446 06c0 9F93      		push r25
+ 1447 06c2 8F93      		push r24
+ 1448 06c4 8091 0000 		lds r24,port+1
+ 1449 06c8 8F93      		push r24
+ 1450 06ca 8091 0000 		lds r24,port
+ 1451 06ce 8F93      		push r24
+ 1452 06d0 0E94 0000 		call fprintf
+ 1453 06d4 0F90      		pop __tmp_reg__
+ 1454 06d6 0F90      		pop __tmp_reg__
+ 1455 06d8 0F90      		pop __tmp_reg__
+ 1456 06da 0F90      		pop __tmp_reg__
+ 1457 06dc 0F90      		pop __tmp_reg__
+ 1458 06de 0F90      		pop __tmp_reg__
+ 1459 06e0 00C0      		rjmp .L315
+ 1460               	.L354:
+ 194:serialparser.c ****             }
+ 1462               	.LM141:
+ 1463 06e2 0E94 0000 		call getSetTilt
+ 1464 06e6 962E      		mov r9,r22
+ 1465 06e8 872E      		mov r8,r23
+ 1466 06ea 782E      		mov r7,r24
+ 1467 06ec 692E      		mov r6,r25
+ 1468 06ee 0E94 0000 		call getSetAngle
+ 1469 06f2 6F92      		push r6
+ 1470 06f4 7F92      		push r7
+ 1471 06f6 8F92      		push r8
+ 1472 06f8 9F92      		push r9
+ 1473 06fa 9F93      		push r25
+ 1474 06fc 8F93      		push r24
+ 1475 06fe 7F93      		push r23
+ 1476 0700 6F93      		push r22
+ 1477 0702 80E0      		ldi r24,lo8(.LC1)
+ 1478 0704 90E0      		ldi r25,hi8(.LC1)
+ 1479 0706 9F93      		push r25
+ 1480 0708 8F93      		push r24
+ 1481               	.L297:
+ 218:serialparser.c ****             }
+ 1483               	.LM142:
+ 1484 070a 8091 0000 		lds r24,port+1
+ 1485 070e 8F93      		push r24
+ 1486 0710 8091 0000 		lds r24,port
+ 1487 0714 8F93      		push r24
+ 1488 0716 0E94 0000 		call fprintf
+ 1489 071a 0FB6      		in __tmp_reg__,__SREG__
+ 1490 071c F894      		cli
+ 1491 071e DEBF      		out __SP_H__,r29
+ 1492 0720 0FBE      		out __SREG__,__tmp_reg__
+ 1493 0722 CDBF      		out __SP_L__,r28
+ 1494 0724 00C0      		rjmp .L315
+ 1495               	.L368:
+ 1496               	.LBE226:
+ 1497               	.LBB227:
+ 263:serialparser.c ****             }
+ 1499               	.LM143:
+ 1500 0726 60E4      		ldi r22,lo8(64)
+ 1501 0728 0E94 0000 		call GetOverSampledVoltage
+ 1502 072c 9F93      		push r25
+ 1503 072e 8F93      		push r24
+ 1504 0730 7F93      		push r23
+ 1505 0732 6F93      		push r22
+ 1506 0734 9924      		clr r9
+ 1507 0736 9F92      		push r9
+ 1508 0738 8F92      		push r8
+ 1509 073a A0E0      		ldi r26,lo8(.LC13)
+ 1510 073c B0E0      		ldi r27,hi8(.LC13)
+ 1511 073e BF93      		push r27
+ 1512 0740 AF93      		push r26
+ 1513 0742 8091 0000 		lds r24,port+1
+ 1514 0746 8F93      		push r24
+ 1515 0748 8091 0000 		lds r24,port
+ 1516 074c 8F93      		push r24
+ 1517 074e 0E94 0000 		call fprintf
+ 1518 0752 0FB6      		in __tmp_reg__,__SREG__
+ 1519 0754 F894      		cli
+ 1520 0756 DEBF      		out __SP_H__,r29
+ 1521 0758 0FBE      		out __SREG__,__tmp_reg__
+ 1522 075a CDBF      		out __SP_L__,r28
+ 1523 075c 00C0      		rjmp .L123
+ 1524               	.L366:
+ 1525               	.LBE227:
+ 1526               	.LBB228:
+ 246:serialparser.c ****                 for (uint8_t i=0; i<8; i++){
+ 1528               	.LM144:
+ 1529 075e 6091 0000 		lds r22,port
+ 1530 0762 7091 0000 		lds r23,port+1
+ 1531 0766 81E4      		ldi r24,lo8(65)
+ 1532 0768 90E0      		ldi r25,0
+ 1533 076a 0E94 0000 		call fputc
+ 1534 076e 812C      		mov r8,__zero_reg__
+ 1535 0770 912C      		mov r9,__zero_reg__
+ 1536               	.L117:
+ 1537               	.LBB163:
+ 248:serialparser.c ****                 }
+ 1539               	.LM145:
+ 1540 0772 60E4      		ldi r22,lo8(64)
+ 1541 0774 882D      		mov r24,r8
+ 1542 0776 0E94 0000 		call GetVoltage
+ 1543 077a 9F93      		push r25
+ 1544 077c 8F93      		push r24
+ 1545 077e 9F92      		push r9
+ 1546 0780 8F92      		push r8
+ 1547 0782 FF92      		push r15
+ 1548 0784 EF92      		push r14
+ 1549 0786 8091 0000 		lds r24,port+1
+ 1550 078a 8F93      		push r24
+ 1551 078c 8091 0000 		lds r24,port
+ 1552 0790 8F93      		push r24
+ 1553 0792 0E94 0000 		call fprintf
+ 1554 0796 9FEF      		ldi r25,-1
+ 1555 0798 891A      		sub r8,r25
+ 1556 079a 990A      		sbc r9,r25
+ 247:serialparser.c ****                     fprintf(port, "%d:%d:", i, GetVoltage(i, 0x40));
+ 1558               	.LM146:
+ 1559 079c 0FB6      		in __tmp_reg__,__SREG__
+ 1560 079e F894      		cli
+ 1561 07a0 DEBF      		out __SP_H__,r29
+ 1562 07a2 0FBE      		out __SREG__,__tmp_reg__
+ 1563 07a4 CDBF      		out __SP_L__,r28
+ 1564 07a6 B8E0      		ldi r27,8
+ 1565 07a8 8B16      		cp r8,r27
+ 1566 07aa 9104      		cpc r9,__zero_reg__
+ 1567 07ac 01F4      		brne .L117
+ 1568               	.LBE163:
+ 250:serialparser.c ****             }
+ 1570               	.LM147:
+ 1571 07ae 6091 0000 		lds r22,port
+ 1572 07b2 7091 0000 		lds r23,port+1
+ 1573 07b6 8AE0      		ldi r24,lo8(10)
+ 1574 07b8 90E0      		ldi r25,0
+ 1575 07ba 0E94 0000 		call fputc
+ 1576 07be 00C0      		rjmp .L115
+ 1577               	.L355:
+ 1578               	.LBE228:
+ 1579               	.LBB229:
+ 197:serialparser.c ****             }
+ 1581               	.LM148:
+ 1582 07c0 0E94 0000 		call getTilt
+ 1583 07c4 962E      		mov r9,r22
+ 1584 07c6 872E      		mov r8,r23
+ 1585 07c8 782E      		mov r7,r24
+ 1586 07ca 692E      		mov r6,r25
+ 1587 07cc 0E94 0000 		call getAngle
+ 1588 07d0 6F92      		push r6
+ 1589 07d2 7F92      		push r7
+ 1590 07d4 8F92      		push r8
+ 1591 07d6 9F92      		push r9
+ 1592 07d8 9F93      		push r25
+ 1593 07da 8F93      		push r24
+ 1594 07dc 7F93      		push r23
+ 1595 07de 6F93      		push r22
+ 1596 07e0 80E0      		ldi r24,lo8(.LC2)
+ 1597 07e2 90E0      		ldi r25,hi8(.LC2)
+ 1598 07e4 9F93      		push r25
+ 1599 07e6 8F93      		push r24
+ 1600 07e8 00C0      		rjmp .L297
+ 1601               	.L369:
+ 1602               	.LBE229:
+ 1603               	.LBB230:
+ 266:serialparser.c ****                 for (uint8_t i=0; i<8; i++){
+ 1605               	.LM149:
+ 1606 07ea 6091 0000 		lds r22,port
+ 1607 07ee 7091 0000 		lds r23,port+1
+ 1608 07f2 82E4      		ldi r24,lo8(66)
+ 1609 07f4 90E0      		ldi r25,0
+ 1610 07f6 0E94 0000 		call fputc
+ 1611 07fa 812C      		mov r8,__zero_reg__
+ 1612 07fc 912C      		mov r9,__zero_reg__
+ 1613               	.L125:
+ 1614               	.LBB154:
+ 268:serialparser.c ****                 }
+ 1616               	.LM150:
+ 1617 07fe 60E4      		ldi r22,lo8(64)
+ 1618 0800 882D      		mov r24,r8
+ 1619 0802 0E94 0000 		call GetOverSampledVoltage
+ 1620 0806 9F93      		push r25
+ 1621 0808 8F93      		push r24
+ 1622 080a 7F93      		push r23
+ 1623 080c 6F93      		push r22
+ 1624 080e 9F92      		push r9
+ 1625 0810 8F92      		push r8
+ 1626 0812 DF92      		push r13
+ 1627 0814 CF92      		push r12
+ 1628 0816 8091 0000 		lds r24,port+1
+ 1629 081a 8F93      		push r24
+ 1630 081c 8091 0000 		lds r24,port
+ 1631 0820 8F93      		push r24
+ 1632 0822 0E94 0000 		call fprintf
+ 1633 0826 3FEF      		ldi r19,-1
+ 1634 0828 831A      		sub r8,r19
+ 1635 082a 930A      		sbc r9,r19
+ 267:serialparser.c ****                     fprintf(port, "%d:%ld:", i, GetOverSampledVoltage(i, 0x40));
+ 1637               	.LM151:
+ 1638 082c 0FB6      		in __tmp_reg__,__SREG__
+ 1639 082e F894      		cli
+ 1640 0830 DEBF      		out __SP_H__,r29
+ 1641 0832 0FBE      		out __SREG__,__tmp_reg__
+ 1642 0834 CDBF      		out __SP_L__,r28
+ 1643 0836 98E0      		ldi r25,8
+ 1644 0838 8916      		cp r8,r25
+ 1645 083a 9104      		cpc r9,__zero_reg__
+ 1646 083c 01F4      		brne .L125
+ 1647               	.LBE154:
+ 270:serialparser.c ****             }
+ 1649               	.LM152:
+ 1650 083e 6091 0000 		lds r22,port
+ 1651 0842 7091 0000 		lds r23,port+1
+ 1652 0846 8AE0      		ldi r24,lo8(10)
+ 1653 0848 90E0      		ldi r25,0
+ 1654 084a 0E94 0000 		call fputc
+ 1655 084e 00C0      		rjmp .L123
+ 1656               	.L362:
+ 1657               	.LBE230:
+ 1658               	.LBB231:
+ 218:serialparser.c ****             }
+ 1660               	.LM153:
+ 1661 0850 0E94 0000 		call getTiltMotorMoveSpeed
+ 1662 0854 962E      		mov r9,r22
+ 1663 0856 872E      		mov r8,r23
+ 1664 0858 782E      		mov r7,r24
+ 1665 085a 692E      		mov r6,r25
+ 1666 085c 0E94 0000 		call getAngleMotorMoveSpeed
+ 1667 0860 6F92      		push r6
+ 1668 0862 7F92      		push r7
+ 1669 0864 8F92      		push r8
+ 1670 0866 9F92      		push r9
+ 1671 0868 9F93      		push r25
+ 1672 086a 8F93      		push r24
+ 1673 086c 7F93      		push r23
+ 1674 086e 6F93      		push r22
+ 1675 0870 A0E0      		ldi r26,lo8(.LC9)
+ 1676 0872 B0E0      		ldi r27,hi8(.LC9)
+ 1677               	.L298:
+ 1678 0874 BF93      		push r27
+ 1679 0876 AF93      		push r26
+ 1680 0878 00C0      		rjmp .L297
+ 1681               	.L356:
+ 200:serialparser.c ****             }
+ 1683               	.LM154:
+ 1684 087a 0E94 0000 		call getTiltMotorStatus
+ 1685 087e 982E      		mov r9,r24
+ 1686 0880 0E94 0000 		call getAngleMotorStatus
+ 1687 0884 1F92      		push __zero_reg__
+ 1688 0886 9F92      		push r9
+ 1689 0888 1F92      		push __zero_reg__
+ 1690 088a 8F93      		push r24
+ 1691 088c 80E0      		ldi r24,lo8(.LC3)
+ 1692 088e 90E0      		ldi r25,hi8(.LC3)
+ 1693               	.L299:
+ 212:serialparser.c ****             }
+ 1695               	.LM155:
+ 1696 0890 9F93      		push r25
+ 1697 0892 8F93      		push r24
+ 1698               	.L332:
+ 1699 0894 8091 0000 		lds r24,port+1
+ 1700 0898 8F93      		push r24
+ 1701 089a 8091 0000 		lds r24,port
+ 1702 089e 8F93      		push r24
+ 1703 08a0 0E94 0000 		call fprintf
+ 1704 08a4 0FB6      		in __tmp_reg__,__SREG__
+ 1705 08a6 F894      		cli
+ 1706 08a8 DEBF      		out __SP_H__,r29
+ 1707 08aa 0FBE      		out __SREG__,__tmp_reg__
+ 1708 08ac CDBF      		out __SP_L__,r28
+ 1709 08ae 00C0      		rjmp .L315
+ 1710               	.L357:
+ 203:serialparser.c ****             }
+ 1712               	.LM156:
+ 1713 08b0 0E94 0000 		call getTiltActuatorCurrentLength
+ 1714 08b4 982E      		mov r9,r24
+ 1715 08b6 892E      		mov r8,r25
+ 1716 08b8 0E94 0000 		call getAngleActuatorCurrentLength
+ 1717 08bc 8F92      		push r8
+ 1718 08be 9F92      		push r9
+ 1719 08c0 9F93      		push r25
+ 1720 08c2 8F93      		push r24
+ 1721 08c4 80E0      		ldi r24,lo8(.LC4)
+ 1722 08c6 90E0      		ldi r25,hi8(.LC4)
+ 1723 08c8 00C0      		rjmp .L299
+ 1724               	.L358:
+ 206:serialparser.c ****             }
+ 1726               	.LM157:
+ 1727 08ca 0E94 0000 		call readTurnButtonState
+ 1728 08ce 882E      		mov r8,r24
+ 1729 08d0 0E94 0000 		call readTiltButtonState
+ 1730 08d4 982E      		mov r9,r24
+ 1731 08d6 0E94 0000 		call readAutoManualState
+ 1732 08da 1F92      		push __zero_reg__
+ 1733 08dc 8F92      		push r8
+ 1734 08de 1F92      		push __zero_reg__
+ 1735 08e0 9F92      		push r9
+ 1736 08e2 1F92      		push __zero_reg__
+ 1737 08e4 8F93      		push r24
+ 1738 08e6 80E0      		ldi r24,lo8(.LC5)
+ 1739 08e8 90E0      		ldi r25,hi8(.LC5)
+ 1740 08ea 9F93      		push r25
+ 1741 08ec 8F93      		push r24
+ 1742 08ee 8091 0000 		lds r24,port+1
+ 1743 08f2 8F93      		push r24
+ 1744 08f4 8091 0000 		lds r24,port
+ 1745 08f8 8F93      		push r24
+ 1746 08fa 0E94 0000 		call fprintf
+ 1747 08fe 0FB6      		in __tmp_reg__,__SREG__
+ 1748 0900 F894      		cli
+ 1749 0902 DEBF      		out __SP_H__,r29
+ 1750 0904 0FBE      		out __SREG__,__tmp_reg__
+ 1751 0906 CDBF      		out __SP_L__,r28
+ 1752 0908 00C0      		rjmp .L315
+ 1753               	.L363:
+ 221:serialparser.c ****             }
+ 1755               	.LM158:
+ 1756 090a 0E94 0000 		call getTiltMoveLength
+ 1757 090e 982E      		mov r9,r24
+ 1758 0910 892E      		mov r8,r25
+ 1759 0912 0E94 0000 		call getAngleMoveLength
+ 1760 0916 8F92      		push r8
+ 1761 0918 9F92      		push r9
+ 1762 091a 9F93      		push r25
+ 1763 091c 8F93      		push r24
+ 1764 091e A0E0      		ldi r26,lo8(.LC10)
+ 1765 0920 B0E0      		ldi r27,hi8(.LC10)
+ 1766 0922 BF93      		push r27
+ 1767 0924 AF93      		push r26
+ 1768 0926 00C0      		rjmp .L332
+ 1769               	.L359:
+ 209:serialparser.c ****             }
+ 1771               	.LM159:
+ 1772 0928 0E94 0000 		call getTiltMotorMaxAngle
+ 1773 092c 6B87      		std Y+11,r22
+ 1774 092e 7C87      		std Y+12,r23
+ 1775 0930 9A8B      		std Y+18,r25
+ 1776 0932 898B      		std Y+17,r24
+ 1777 0934 0E94 0000 		call getAngleMotorMaxAngle
+ 1778 0938 AB01      		movw r20,r22
+ 1779 093a 8D87      		std Y+13,r24
+ 1780 093c 9E87      		std Y+14,r25
+ 1781 093e 6F87      		std Y+15,r22
+ 1782 0940 588B      		std Y+16,r21
+ 1783 0942 0E94 0000 		call getTiltMotorMinAngle
+ 1784 0946 962E      		mov r9,r22
+ 1785 0948 872E      		mov r8,r23
+ 1786 094a 782E      		mov r7,r24
+ 1787 094c 692E      		mov r6,r25
+ 1788 094e 0E94 0000 		call getAngleMotorMinAngle
+ 1789 0952 2A89      		ldd r18,Y+18
+ 1790 0954 2F93      		push r18
+ 1791 0956 3989      		ldd r19,Y+17
+ 1792 0958 3F93      		push r19
+ 1793 095a 3C85      		ldd r19,Y+12
+ 1794 095c 3F93      		push r19
+ 1795 095e 2B85      		ldd r18,Y+11
+ 1796 0960 2F93      		push r18
+ 1797 0962 3E85      		ldd r19,Y+14
+ 1798 0964 3F93      		push r19
+ 1799 0966 2D85      		ldd r18,Y+13
+ 1800 0968 2F93      		push r18
+ 1801 096a 5889      		ldd r21,Y+16
+ 1802 096c 5F93      		push r21
+ 1803 096e 4F85      		ldd r20,Y+15
+ 1804 0970 4F93      		push r20
+ 1805 0972 6F92      		push r6
+ 1806 0974 7F92      		push r7
+ 1807 0976 8F92      		push r8
+ 1808 0978 9F92      		push r9
+ 1809 097a 9F93      		push r25
+ 1810 097c 8F93      		push r24
+ 1811 097e 7F93      		push r23
+ 1812 0980 6F93      		push r22
+ 1813 0982 80E0      		ldi r24,lo8(.LC6)
+ 1814 0984 90E0      		ldi r25,hi8(.LC6)
+ 1815 0986 9F93      		push r25
+ 1816 0988 8F93      		push r24
+ 1817 098a 8091 0000 		lds r24,port+1
+ 1818 098e 8F93      		push r24
+ 1819 0990 8091 0000 		lds r24,port
+ 1820 0994 8F93      		push r24
+ 1821 0996 0E94 0000 		call fprintf
+ 1822 099a 0FB6      		in __tmp_reg__,__SREG__
+ 1823 099c F894      		cli
+ 1824 099e DEBF      		out __SP_H__,r29
+ 1825 09a0 0FBE      		out __SREG__,__tmp_reg__
+ 1826 09a2 CDBF      		out __SP_L__,r28
+ 1827 09a4 00C0      		rjmp .L315
+ 1828               	.L371:
+ 1829               	.LBE231:
+ 1830               	.LBB232:
+ 1831 09a6 94E1      		ldi r25,lo8(20)
+ 1832 09a8 00C0      		rjmp .L49
+ 1833               	.L373:
+ 1834               	.LBB215:
+ 1835               	.LBB186:
+ 1836               	.LBB187:
+  96:serialparser.c ****         ring_read++;
+ 1838               	.LM160:
+ 1839 09aa 2091 0000 		lds r18,ring_read
+ 1840 09ae 8091 0000 		lds r24,ring_write
+ 1841 09b2 2817      		cp r18,r24
+ 1842 09b4 01F0      		breq .L52
+  97:serialparser.c ****         maxlength --;
+ 1844               	.LM161:
+ 1845 09b6 8091 0000 		lds r24,ring_read
+ 1846 09ba 8F5F      		subi r24,lo8(-(1))
+ 1847 09bc 8093 0000 		sts ring_read,r24
+ 1848 09c0 9150      		subi r25,lo8(-(-1))
+  99:serialparser.c ****             return ERROR_MAX_LENGTH;
+ 1850               	.LM162:
+ 1851 09c2 01F4      		brne .+2
+ 1852 09c4 00C0      		rjmp .L60
+ 1853               	.L49:
+  96:serialparser.c ****         ring_read++;
+ 1855               	.LM163:
+ 1856 09c6 E091 0000 		lds r30,ring_read
+ 1857 09ca F0E0      		ldi r31,0
+ 1858 09cc E050      		subi r30,lo8(-(buffer))
+ 1859 09ce F040      		sbci r31,hi8(-(buffer))
+ 1860 09d0 8081      		ld r24,Z
+ 1861 09d2 8A33      		cpi r24,lo8(58)
+ 1862 09d4 01F4      		brne .L373
+ 1863               	.L52:
+ 103:serialparser.c ****         return ERROR_CANNOT_FIND;
+ 1865               	.LM164:
+ 1866 09d6 9091 0000 		lds r25,ring_read
+ 1867 09da 8091 0000 		lds r24,ring_write
+ 1868 09de 9817      		cp r25,r24
+ 1869 09e0 01F4      		brne .+2
+ 1870 09e2 00C0      		rjmp .L60
+ 1871               	.LBB188:
+ 1872               	.LBB189:
+ 107:serialparser.c **** 
+ 1874               	.LM165:
+ 1875 09e4 8091 0000 		lds r24,ring_read
+ 1876 09e8 8F5F      		subi r24,lo8(-(1))
+ 1877 09ea 8093 0000 		sts ring_read,r24
+ 110:serialparser.c ****     while(buffer[ring_read] != stopchar && buffer[ring_read] != secondstopchar){ //Find next delimi
+ 1879               	.LM166:
+ 1880 09ee 9091 0000 		lds r25,ring_read
+ 1881 09f2 00C0      		rjmp .L308
+ 1882               	.L334:
+ 111:serialparser.c ****         ring_read++; //Step forward
+ 1884               	.LM167:
+ 1885 09f4 E091 0000 		lds r30,ring_read
+ 1886 09f8 F0E0      		ldi r31,0
+ 1887 09fa E050      		subi r30,lo8(-(buffer))
+ 1888 09fc F040      		sbci r31,hi8(-(buffer))
+ 1889 09fe 8081      		ld r24,Z
+ 1890 0a00 8A30      		cpi r24,lo8(10)
+ 1891 0a02 01F0      		breq .L57
+ 112:serialparser.c ****     }
+ 1893               	.LM168:
+ 1894 0a04 8091 0000 		lds r24,ring_read
+ 1895 0a08 8F5F      		subi r24,lo8(-(1))
+ 1896 0a0a 8093 0000 		sts ring_read,r24
+ 1897               	.L308:
+ 111:serialparser.c ****         ring_read++; //Step forward
+ 1899               	.LM169:
+ 1900 0a0e E091 0000 		lds r30,ring_read
+ 1901 0a12 F0E0      		ldi r31,0
+ 1902 0a14 E050      		subi r30,lo8(-(buffer))
+ 1903 0a16 F040      		sbci r31,hi8(-(buffer))
+ 1904 0a18 8081      		ld r24,Z
+ 1905 0a1a 8A33      		cpi r24,lo8(58)
+ 1906 0a1c 01F4      		brne .L334
+ 1907               	.L57:
+ 114:serialparser.c ****     
+ 1909               	.LM170:
+ 1910 0a1e 8091 0000 		lds r24,ring_read
+ 1911               	.LBE189:
+ 1912               	.LBE188:
+ 1913               	.LBE187:
+ 1914               	.LBE186:
+ 1915               	.LBB190:
+ 1916               	.LBB175:
+ 1917               	.LBB176:
+  79:serialparser.c ****     
+ 1919               	.LM171:
+ 1920 0a22 2AE0      		ldi r18,lo8(10)
+ 1921 0a24 D501      		movw r26,r10
+ 1922               		0:
+ 1923 0a26 1D92      		st X+,__zero_reg__
+ 1924 0a28 2A95      		dec r18
+ 1925 0a2a 01F4      		brne 0b
+ 1926               	.LBB177:
+  83:serialparser.c ****         if (start == stop){
+ 1928               	.LM172:
+ 1929 0a2c E1E0      		ldi r30,lo8(1)
+ 1930 0a2e E90F      		add r30,r25
+ 1931 0a30 A92F      		mov r26,r25
+ 1932 0a32 B0E0      		ldi r27,0
+ 1933 0a34 A050      		subi r26,lo8(-(buffer))
+ 1934 0a36 B040      		sbci r27,hi8(-(buffer))
+ 1935 0a38 2C91      		ld r18,X
+ 1936 0a3a 2983      		std Y+1,r18
+  84:serialparser.c ****            i = 10;
+ 1938               	.LM173:
+ 1939 0a3c 8E17      		cp r24,r30
+ 1940 0a3e 01F4      		brne .+2
+ 1941 0a40 00C0      		rjmp .L55
+  83:serialparser.c ****         if (start == stop){
+ 1943               	.LM174:
+ 1944 0a42 A2E0      		ldi r26,lo8(2)
+ 1945 0a44 A90F      		add r26,r25
+ 1946 0a46 F0E0      		ldi r31,0
+ 1947 0a48 E050      		subi r30,lo8(-(buffer))
+ 1948 0a4a F040      		sbci r31,hi8(-(buffer))
+ 1949 0a4c 2081      		ld r18,Z
+ 1950 0a4e 2A83      		std Y+2,r18
+  84:serialparser.c ****            i = 10;
+ 1952               	.LM175:
+ 1953 0a50 8A17      		cp r24,r26
+ 1954 0a52 01F4      		brne .+2
+ 1955 0a54 00C0      		rjmp .L55
+  83:serialparser.c ****         if (start == stop){
+ 1957               	.LM176:
+ 1958 0a56 E3E0      		ldi r30,lo8(3)
+ 1959 0a58 E90F      		add r30,r25
+ 1960 0a5a B0E0      		ldi r27,0
+ 1961 0a5c A050      		subi r26,lo8(-(buffer))
+ 1962 0a5e B040      		sbci r27,hi8(-(buffer))
+ 1963 0a60 2C91      		ld r18,X
+ 1964 0a62 2B83      		std Y+3,r18
+  84:serialparser.c ****            i = 10;
+ 1966               	.LM177:
+ 1967 0a64 8E17      		cp r24,r30
+ 1968 0a66 01F0      		breq .L55
+  83:serialparser.c ****         if (start == stop){
+ 1970               	.LM178:
+ 1971 0a68 A4E0      		ldi r26,lo8(4)
+ 1972 0a6a A90F      		add r26,r25
+ 1973 0a6c F0E0      		ldi r31,0
+ 1974 0a6e E050      		subi r30,lo8(-(buffer))
+ 1975 0a70 F040      		sbci r31,hi8(-(buffer))
+ 1976 0a72 2081      		ld r18,Z
+ 1977 0a74 2C83      		std Y+4,r18
+  84:serialparser.c ****            i = 10;
+ 1979               	.LM179:
+ 1980 0a76 8A17      		cp r24,r26
+ 1981 0a78 01F0      		breq .L55
+  83:serialparser.c ****         if (start == stop){
+ 1983               	.LM180:
+ 1984 0a7a E5E0      		ldi r30,lo8(5)
+ 1985 0a7c E90F      		add r30,r25
+ 1986 0a7e B0E0      		ldi r27,0
+ 1987 0a80 A050      		subi r26,lo8(-(buffer))
+ 1988 0a82 B040      		sbci r27,hi8(-(buffer))
+ 1989 0a84 2C91      		ld r18,X
+ 1990 0a86 2D83      		std Y+5,r18
+  84:serialparser.c ****            i = 10;
+ 1992               	.LM181:
+ 1993 0a88 8E17      		cp r24,r30
+ 1994 0a8a 01F0      		breq .L55
+  83:serialparser.c ****         if (start == stop){
+ 1996               	.LM182:
+ 1997 0a8c A6E0      		ldi r26,lo8(6)
+ 1998 0a8e A90F      		add r26,r25
+ 1999 0a90 F0E0      		ldi r31,0
+ 2000 0a92 E050      		subi r30,lo8(-(buffer))
+ 2001 0a94 F040      		sbci r31,hi8(-(buffer))
+ 2002 0a96 2081      		ld r18,Z
+ 2003 0a98 2E83      		std Y+6,r18
+  84:serialparser.c ****            i = 10;
+ 2005               	.LM183:
+ 2006 0a9a 8A17      		cp r24,r26
+ 2007 0a9c 01F0      		breq .L55
+  83:serialparser.c ****         if (start == stop){
+ 2009               	.LM184:
+ 2010 0a9e E7E0      		ldi r30,lo8(7)
+ 2011 0aa0 E90F      		add r30,r25
+ 2012 0aa2 B0E0      		ldi r27,0
+ 2013 0aa4 A050      		subi r26,lo8(-(buffer))
+ 2014 0aa6 B040      		sbci r27,hi8(-(buffer))
+ 2015 0aa8 2C91      		ld r18,X
+ 2016 0aaa 2F83      		std Y+7,r18
+  84:serialparser.c ****            i = 10;
+ 2018               	.LM185:
+ 2019 0aac 8E17      		cp r24,r30
+ 2020 0aae 01F0      		breq .L55
+  83:serialparser.c ****         if (start == stop){
+ 2022               	.LM186:
+ 2023 0ab0 A8E0      		ldi r26,lo8(8)
+ 2024 0ab2 A90F      		add r26,r25
+ 2025 0ab4 F0E0      		ldi r31,0
+ 2026 0ab6 E050      		subi r30,lo8(-(buffer))
+ 2027 0ab8 F040      		sbci r31,hi8(-(buffer))
+ 2028 0aba 2081      		ld r18,Z
+ 2029 0abc 2887      		std Y+8,r18
+  84:serialparser.c ****            i = 10;
+ 2031               	.LM187:
+ 2032 0abe 8A17      		cp r24,r26
+ 2033 0ac0 01F0      		breq .L55
+  83:serialparser.c ****         if (start == stop){
+ 2035               	.LM188:
+ 2036 0ac2 E9E0      		ldi r30,lo8(9)
+ 2037 0ac4 E90F      		add r30,r25
+ 2038 0ac6 B0E0      		ldi r27,0
+ 2039 0ac8 A050      		subi r26,lo8(-(buffer))
+ 2040 0aca B040      		sbci r27,hi8(-(buffer))
+ 2041 0acc 9C91      		ld r25,X
+ 2042 0ace 9987      		std Y+9,r25
+  84:serialparser.c ****            i = 10;
+ 2044               	.LM189:
+ 2045 0ad0 8E17      		cp r24,r30
+ 2046 0ad2 01F0      		breq .L55
+  83:serialparser.c ****         if (start == stop){
+ 2048               	.LM190:
+ 2049 0ad4 F0E0      		ldi r31,0
+ 2050 0ad6 E050      		subi r30,lo8(-(buffer))
+ 2051 0ad8 F040      		sbci r31,hi8(-(buffer))
+ 2052 0ada 8081      		ld r24,Z
+ 2053 0adc 8A87      		std Y+10,r24
+ 2054               	.L55:
+ 2055               	.LBE177:
+  90:serialparser.c **** }
+ 2057               	.LM191:
+ 2058 0ade C501      		movw r24,r10
+ 2059 0ae0 0E94 0000 		call atof
+ 2060               	.LBE176:
+ 2061               	.LBE175:
+ 134:serialparser.c ****                         succ = findParameter(':', ':', '\n', 20, &start, &stop);
+ 2063               	.LM192:
+ 2064 0ae4 0E94 0000 		call setAngle
+ 2065 0ae8 982E      		mov r9,r24
+ 2066 0aea 24E1      		ldi r18,lo8(20)
+ 2067 0aec 00C0      		rjmp .L59
+ 2068               	.L374:
+ 2069               	.LBB178:
+ 2070               	.LBB179:
+  96:serialparser.c ****         ring_read++;
+ 2072               	.LM193:
+ 2073 0aee 9091 0000 		lds r25,ring_read
+ 2074 0af2 8091 0000 		lds r24,ring_write
+ 2075 0af6 9817      		cp r25,r24
+ 2076 0af8 01F0      		breq .L61
+  97:serialparser.c ****         maxlength --;
+ 2078               	.LM194:
+ 2079 0afa 8091 0000 		lds r24,ring_read
+ 2080 0afe 8F5F      		subi r24,lo8(-(1))
+ 2081 0b00 8093 0000 		sts ring_read,r24
+ 2082 0b04 2150      		subi r18,lo8(-(-1))
+  99:serialparser.c ****             return ERROR_MAX_LENGTH;
+ 2084               	.LM195:
+ 2085 0b06 01F4      		brne .+2
+ 2086 0b08 00C0      		rjmp .L60
+ 2087               	.L59:
+  96:serialparser.c ****         ring_read++;
+ 2089               	.LM196:
+ 2090 0b0a E091 0000 		lds r30,ring_read
+ 2091 0b0e F0E0      		ldi r31,0
+ 2092 0b10 E050      		subi r30,lo8(-(buffer))
+ 2093 0b12 F040      		sbci r31,hi8(-(buffer))
+ 2094 0b14 8081      		ld r24,Z
+ 2095 0b16 8A33      		cpi r24,lo8(58)
+ 2096 0b18 01F4      		brne .L374
+ 2097               	.L61:
+ 103:serialparser.c ****         return ERROR_CANNOT_FIND;
+ 2099               	.LM197:
+ 2100 0b1a 9091 0000 		lds r25,ring_read
+ 2101 0b1e 8091 0000 		lds r24,ring_write
+ 2102 0b22 9817      		cp r25,r24
+ 2103 0b24 01F4      		brne .+2
+ 2104 0b26 00C0      		rjmp .L60
+ 2105               	.LBB180:
+ 2106               	.LBB181:
+ 107:serialparser.c **** 
+ 2108               	.LM198:
+ 2109 0b28 8091 0000 		lds r24,ring_read
+ 2110 0b2c 8F5F      		subi r24,lo8(-(1))
+ 2111 0b2e 8093 0000 		sts ring_read,r24
+ 110:serialparser.c ****     while(buffer[ring_read] != stopchar && buffer[ring_read] != secondstopchar){ //Find next delimi
+ 2113               	.LM199:
+ 2114 0b32 8091 0000 		lds r24,ring_read
+ 2115 0b36 00C0      		rjmp .L309
+ 2116               	.L335:
+ 111:serialparser.c ****         ring_read++; //Step forward
+ 2118               	.LM200:
+ 2119 0b38 E091 0000 		lds r30,ring_read
+ 2120 0b3c F0E0      		ldi r31,0
+ 2121 0b3e E050      		subi r30,lo8(-(buffer))
+ 2122 0b40 F040      		sbci r31,hi8(-(buffer))
+ 2123 0b42 9081      		ld r25,Z
+ 2124 0b44 9A30      		cpi r25,lo8(10)
+ 2125 0b46 01F0      		breq .L66
+ 112:serialparser.c ****     }
+ 2127               	.LM201:
+ 2128 0b48 9091 0000 		lds r25,ring_read
+ 2129 0b4c 9F5F      		subi r25,lo8(-(1))
+ 2130 0b4e 9093 0000 		sts ring_read,r25
+ 2131               	.L309:
+ 111:serialparser.c ****         ring_read++; //Step forward
+ 2133               	.LM202:
+ 2134 0b52 E091 0000 		lds r30,ring_read
+ 2135 0b56 F0E0      		ldi r31,0
+ 2136 0b58 E050      		subi r30,lo8(-(buffer))
+ 2137 0b5a F040      		sbci r31,hi8(-(buffer))
+ 2138 0b5c 9081      		ld r25,Z
+ 2139 0b5e 9A33      		cpi r25,lo8(58)
+ 2140 0b60 01F4      		brne .L335
+ 2141               	.L66:
+ 114:serialparser.c ****     
+ 2143               	.LM203:
+ 2144 0b62 9091 0000 		lds r25,ring_read
+ 2145               	.LBE181:
+ 2146               	.LBE180:
+ 2147               	.LBE179:
+ 2148               	.LBE178:
+ 2149               	.LBB182:
+ 2150               	.LBB183:
+ 2151               	.LBB184:
+  79:serialparser.c ****     
+ 2153               	.LM204:
+ 2154 0b66 2AE0      		ldi r18,lo8(10)
+ 2155 0b68 F501      		movw r30,r10
+ 2156               		0:
+ 2157 0b6a 1192      		st Z+,__zero_reg__
+ 2158 0b6c 2A95      		dec r18
+ 2159 0b6e 01F4      		brne 0b
+ 2160               	.LBB185:
+  83:serialparser.c ****         if (start == stop){
+ 2162               	.LM205:
+ 2163 0b70 E1E0      		ldi r30,lo8(1)
+ 2164 0b72 E80F      		add r30,r24
+ 2165 0b74 A82F      		mov r26,r24
+ 2166 0b76 B0E0      		ldi r27,0
+ 2167 0b78 A050      		subi r26,lo8(-(buffer))
+ 2168 0b7a B040      		sbci r27,hi8(-(buffer))
+ 2169 0b7c 2C91      		ld r18,X
+ 2170 0b7e 2983      		std Y+1,r18
+  84:serialparser.c ****            i = 10;
+ 2172               	.LM206:
+ 2173 0b80 9E17      		cp r25,r30
+ 2174 0b82 01F4      		brne .+2
+ 2175 0b84 00C0      		rjmp .L64
+  83:serialparser.c ****         if (start == stop){
+ 2177               	.LM207:
+ 2178 0b86 A2E0      		ldi r26,lo8(2)
+ 2179 0b88 A80F      		add r26,r24
+ 2180 0b8a F0E0      		ldi r31,0
+ 2181 0b8c E050      		subi r30,lo8(-(buffer))
+ 2182 0b8e F040      		sbci r31,hi8(-(buffer))
+ 2183 0b90 2081      		ld r18,Z
+ 2184 0b92 2A83      		std Y+2,r18
+  84:serialparser.c ****            i = 10;
+ 2186               	.LM208:
+ 2187 0b94 9A17      		cp r25,r26
+ 2188 0b96 01F4      		brne .+2
+ 2189 0b98 00C0      		rjmp .L64
+  83:serialparser.c ****         if (start == stop){
+ 2191               	.LM209:
+ 2192 0b9a E3E0      		ldi r30,lo8(3)
+ 2193 0b9c E80F      		add r30,r24
+ 2194 0b9e B0E0      		ldi r27,0
+ 2195 0ba0 A050      		subi r26,lo8(-(buffer))
+ 2196 0ba2 B040      		sbci r27,hi8(-(buffer))
+ 2197 0ba4 2C91      		ld r18,X
+ 2198 0ba6 2B83      		std Y+3,r18
+  84:serialparser.c ****            i = 10;
+ 2200               	.LM210:
+ 2201 0ba8 9E17      		cp r25,r30
+ 2202 0baa 01F0      		breq .L64
+  83:serialparser.c ****         if (start == stop){
+ 2204               	.LM211:
+ 2205 0bac A4E0      		ldi r26,lo8(4)
+ 2206 0bae A80F      		add r26,r24
+ 2207 0bb0 F0E0      		ldi r31,0
+ 2208 0bb2 E050      		subi r30,lo8(-(buffer))
+ 2209 0bb4 F040      		sbci r31,hi8(-(buffer))
+ 2210 0bb6 2081      		ld r18,Z
+ 2211 0bb8 2C83      		std Y+4,r18
+  84:serialparser.c ****            i = 10;
+ 2213               	.LM212:
+ 2214 0bba 9A17      		cp r25,r26
+ 2215 0bbc 01F0      		breq .L64
+  83:serialparser.c ****         if (start == stop){
+ 2217               	.LM213:
+ 2218 0bbe E5E0      		ldi r30,lo8(5)
+ 2219 0bc0 E80F      		add r30,r24
+ 2220 0bc2 B0E0      		ldi r27,0
+ 2221 0bc4 A050      		subi r26,lo8(-(buffer))
+ 2222 0bc6 B040      		sbci r27,hi8(-(buffer))
+ 2223 0bc8 2C91      		ld r18,X
+ 2224 0bca 2D83      		std Y+5,r18
+  84:serialparser.c ****            i = 10;
+ 2226               	.LM214:
+ 2227 0bcc 9E17      		cp r25,r30
+ 2228 0bce 01F0      		breq .L64
+  83:serialparser.c ****         if (start == stop){
+ 2230               	.LM215:
+ 2231 0bd0 A6E0      		ldi r26,lo8(6)
+ 2232 0bd2 A80F      		add r26,r24
+ 2233 0bd4 F0E0      		ldi r31,0
+ 2234 0bd6 E050      		subi r30,lo8(-(buffer))
+ 2235 0bd8 F040      		sbci r31,hi8(-(buffer))
+ 2236 0bda 2081      		ld r18,Z
+ 2237 0bdc 2E83      		std Y+6,r18
+  84:serialparser.c ****            i = 10;
+ 2239               	.LM216:
+ 2240 0bde 9A17      		cp r25,r26
+ 2241 0be0 01F0      		breq .L64
+  83:serialparser.c ****         if (start == stop){
+ 2243               	.LM217:
+ 2244 0be2 E7E0      		ldi r30,lo8(7)
+ 2245 0be4 E80F      		add r30,r24
+ 2246 0be6 B0E0      		ldi r27,0
+ 2247 0be8 A050      		subi r26,lo8(-(buffer))
+ 2248 0bea B040      		sbci r27,hi8(-(buffer))
+ 2249 0bec 2C91      		ld r18,X
+ 2250 0bee 2F83      		std Y+7,r18
+  84:serialparser.c ****            i = 10;
+ 2252               	.LM218:
+ 2253 0bf0 9E17      		cp r25,r30
+ 2254 0bf2 01F0      		breq .L64
+  83:serialparser.c ****         if (start == stop){
+ 2256               	.LM219:
+ 2257 0bf4 A8E0      		ldi r26,lo8(8)
+ 2258 0bf6 A80F      		add r26,r24
+ 2259 0bf8 F0E0      		ldi r31,0
+ 2260 0bfa E050      		subi r30,lo8(-(buffer))
+ 2261 0bfc F040      		sbci r31,hi8(-(buffer))
+ 2262 0bfe 2081      		ld r18,Z
+ 2263 0c00 2887      		std Y+8,r18
+  84:serialparser.c ****            i = 10;
+ 2265               	.LM220:
+ 2266 0c02 9A17      		cp r25,r26
+ 2267 0c04 01F0      		breq .L64
+  83:serialparser.c ****         if (start == stop){
+ 2269               	.LM221:
+ 2270 0c06 E9E0      		ldi r30,lo8(9)
+ 2271 0c08 E80F      		add r30,r24
+ 2272 0c0a B0E0      		ldi r27,0
+ 2273 0c0c A050      		subi r26,lo8(-(buffer))
+ 2274 0c0e B040      		sbci r27,hi8(-(buffer))
+ 2275 0c10 8C91      		ld r24,X
+ 2276 0c12 8987      		std Y+9,r24
+  84:serialparser.c ****            i = 10;
+ 2278               	.LM222:
+ 2279 0c14 9E17      		cp r25,r30
+ 2280 0c16 01F0      		breq .L64
+  83:serialparser.c ****         if (start == stop){
+ 2282               	.LM223:
+ 2283 0c18 F0E0      		ldi r31,0
+ 2284 0c1a E050      		subi r30,lo8(-(buffer))
+ 2285 0c1c F040      		sbci r31,hi8(-(buffer))
+ 2286 0c1e 8081      		ld r24,Z
+ 2287 0c20 8A87      		std Y+10,r24
+ 2288               	.L64:
+ 2289               	.LBE185:
+  90:serialparser.c **** }
+ 2291               	.LM224:
+ 2292 0c22 C501      		movw r24,r10
+ 2293 0c24 0E94 0000 		call atof
+ 2294               	.LBE184:
+ 2295               	.LBE183:
+ 137:serialparser.c ****                             if (asuccess == 0 && tsuccess == 0){
+ 2297               	.LM225:
+ 2298 0c28 0E94 0000 		call setTilt
+ 138:serialparser.c ****                                 fprintf_P(port, PSTR("OK\n"));
+ 2300               	.LM226:
+ 2301 0c2c 9110      		cpse r9,__zero_reg__
+ 2302 0c2e 00C0      		rjmp .L60
+ 138:serialparser.c ****                                 fprintf_P(port, PSTR("OK\n"));
+ 2304               	.LM227:
+ 2305 0c30 8111      		cpse r24,__zero_reg__
+ 2306 0c32 00C0      		rjmp .L60
+ 139:serialparser.c ****                             }
+ 2308               	.LM228:
+ 2309 0c34 80E0      		ldi r24,lo8(__c.2509)
+ 2310 0c36 90E0      		ldi r25,hi8(__c.2509)
+ 2311 0c38 00C0      		rjmp .L293
+ 2312               	.L360:
+ 2313               	.LBE182:
+ 2314               	.LBE190:
+ 2315               	.LBE215:
+ 2316               	.LBE232:
+ 2317               	.LBB233:
+ 212:serialparser.c ****             }
+ 2319               	.LM229:
+ 2320 0c3a 0E94 0000 		call getTiltActuatorSetLength
+ 2321 0c3e 982E      		mov r9,r24
+ 2322 0c40 892E      		mov r8,r25
+ 2323 0c42 0E94 0000 		call getAngleActuatorSetLength
+ 2324 0c46 8F92      		push r8
+ 2325 0c48 9F92      		push r9
+ 2326 0c4a 9F93      		push r25
+ 2327 0c4c 8F93      		push r24
+ 2328 0c4e 80E0      		ldi r24,lo8(.LC7)
+ 2329 0c50 90E0      		ldi r25,hi8(.LC7)
+ 2330 0c52 00C0      		rjmp .L299
+ 2331               	.L372:
+ 2332               	.LBE233:
+ 2333               	.LBB234:
+ 2334 0c54 94E1      		ldi r25,lo8(20)
+ 2335 0c56 00C0      		rjmp .L71
+ 2336               	.L375:
+ 2337               	.LBB216:
+ 2338               	.LBB207:
+ 2339               	.LBB208:
+  96:serialparser.c ****         ring_read++;
+ 2341               	.LM230:
+ 2342 0c58 2091 0000 		lds r18,ring_read
+ 2343 0c5c 8091 0000 		lds r24,ring_write
+ 2344 0c60 2817      		cp r18,r24
+ 2345 0c62 01F0      		breq .L74
+  97:serialparser.c ****         maxlength --;
+ 2347               	.LM231:
+ 2348 0c64 8091 0000 		lds r24,ring_read
+ 2349 0c68 8F5F      		subi r24,lo8(-(1))
+ 2350 0c6a 8093 0000 		sts ring_read,r24
+ 2351 0c6e 9150      		subi r25,lo8(-(-1))
+  99:serialparser.c ****             return ERROR_MAX_LENGTH;
+ 2353               	.LM232:
+ 2354 0c70 01F4      		brne .+2
+ 2355 0c72 00C0      		rjmp .L313
+ 2356               	.L71:
+  96:serialparser.c ****         ring_read++;
+ 2358               	.LM233:
+ 2359 0c74 E091 0000 		lds r30,ring_read
+ 2360 0c78 F0E0      		ldi r31,0
+ 2361 0c7a E050      		subi r30,lo8(-(buffer))
+ 2362 0c7c F040      		sbci r31,hi8(-(buffer))
+ 2363 0c7e 8081      		ld r24,Z
+ 2364 0c80 8A33      		cpi r24,lo8(58)
+ 2365 0c82 01F4      		brne .L375
+ 2366               	.L74:
+ 103:serialparser.c ****         return ERROR_CANNOT_FIND;
+ 2368               	.LM234:
+ 2369 0c84 9091 0000 		lds r25,ring_read
+ 2370 0c88 8091 0000 		lds r24,ring_write
+ 2371 0c8c 9817      		cp r25,r24
+ 2372 0c8e 01F4      		brne .+2
+ 2373 0c90 00C0      		rjmp .L313
+ 2374               	.LBB209:
+ 2375               	.LBB210:
+ 107:serialparser.c **** 
+ 2377               	.LM235:
+ 2378 0c92 8091 0000 		lds r24,ring_read
+ 2379 0c96 8F5F      		subi r24,lo8(-(1))
+ 2380 0c98 8093 0000 		sts ring_read,r24
+ 110:serialparser.c ****     while(buffer[ring_read] != stopchar && buffer[ring_read] != secondstopchar){ //Find next delimi
+ 2382               	.LM236:
+ 2383 0c9c 9091 0000 		lds r25,ring_read
+ 2384 0ca0 00C0      		rjmp .L310
+ 2385               	.L337:
+ 111:serialparser.c ****         ring_read++; //Step forward
+ 2387               	.LM237:
+ 2388 0ca2 E091 0000 		lds r30,ring_read
+ 2389 0ca6 F0E0      		ldi r31,0
+ 2390 0ca8 E050      		subi r30,lo8(-(buffer))
+ 2391 0caa F040      		sbci r31,hi8(-(buffer))
+ 2392 0cac 8081      		ld r24,Z
+ 2393 0cae 8A30      		cpi r24,lo8(10)
+ 2394 0cb0 01F0      		breq .L79
+ 112:serialparser.c ****     }
+ 2396               	.LM238:
+ 2397 0cb2 8091 0000 		lds r24,ring_read
+ 2398 0cb6 8F5F      		subi r24,lo8(-(1))
+ 2399 0cb8 8093 0000 		sts ring_read,r24
+ 2400               	.L310:
+ 111:serialparser.c ****         ring_read++; //Step forward
+ 2402               	.LM239:
+ 2403 0cbc E091 0000 		lds r30,ring_read
+ 2404 0cc0 F0E0      		ldi r31,0
+ 2405 0cc2 E050      		subi r30,lo8(-(buffer))
+ 2406 0cc4 F040      		sbci r31,hi8(-(buffer))
+ 2407 0cc6 8081      		ld r24,Z
+ 2408 0cc8 8A33      		cpi r24,lo8(58)
+ 2409 0cca 01F4      		brne .L337
+ 2410               	.L79:
+ 114:serialparser.c ****     
+ 2412               	.LM240:
+ 2413 0ccc 8091 0000 		lds r24,ring_read
+ 2414               	.LBE210:
+ 2415               	.LBE209:
+ 2416               	.LBE208:
+ 2417               	.LBE207:
+ 2418               	.LBB211:
+ 2419               	.LBB198:
+ 2420               	.LBB199:
+  62:serialparser.c ****     
+ 2422               	.LM241:
+ 2423 0cd0 25E0      		ldi r18,lo8(5)
+ 2424 0cd2 D501      		movw r26,r10
+ 2425               		0:
+ 2426 0cd4 1D92      		st X+,__zero_reg__
+ 2427 0cd6 2A95      		dec r18
+ 2428 0cd8 01F4      		brne 0b
+ 2429               	.LBB200:
+  66:serialparser.c ****         if (start == stop){
+ 2431               	.LM242:
+ 2432 0cda A1E0      		ldi r26,lo8(1)
+ 2433 0cdc A90F      		add r26,r25
+ 2434 0cde E92F      		mov r30,r25
+ 2435 0ce0 F0E0      		ldi r31,0
+ 2436 0ce2 E050      		subi r30,lo8(-(buffer))
+ 2437 0ce4 F040      		sbci r31,hi8(-(buffer))
+ 2438 0ce6 2081      		ld r18,Z
+ 2439 0ce8 2983      		std Y+1,r18
+  67:serialparser.c ****            i = 5;
+ 2441               	.LM243:
+ 2442 0cea 8A17      		cp r24,r26
+ 2443 0cec 01F0      		breq .L77
+  66:serialparser.c ****         if (start == stop){
+ 2445               	.LM244:
+ 2446 0cee E2E0      		ldi r30,lo8(2)
+ 2447 0cf0 E90F      		add r30,r25
+ 2448 0cf2 B0E0      		ldi r27,0
+ 2449 0cf4 A050      		subi r26,lo8(-(buffer))
+ 2450 0cf6 B040      		sbci r27,hi8(-(buffer))
+ 2451 0cf8 2C91      		ld r18,X
+ 2452 0cfa 2A83      		std Y+2,r18
+  67:serialparser.c ****            i = 5;
+ 2454               	.LM245:
+ 2455 0cfc 8E17      		cp r24,r30
+ 2456 0cfe 01F0      		breq .L77
+  66:serialparser.c ****         if (start == stop){
+ 2458               	.LM246:
+ 2459 0d00 A3E0      		ldi r26,lo8(3)
+ 2460 0d02 A90F      		add r26,r25
+ 2461 0d04 F0E0      		ldi r31,0
+ 2462 0d06 E050      		subi r30,lo8(-(buffer))
+ 2463 0d08 F040      		sbci r31,hi8(-(buffer))
+ 2464 0d0a 2081      		ld r18,Z
+ 2465 0d0c 2B83      		std Y+3,r18
+  67:serialparser.c ****            i = 5;
+ 2467               	.LM247:
+ 2468 0d0e 8A17      		cp r24,r26
+ 2469 0d10 01F0      		breq .L77
+  66:serialparser.c ****         if (start == stop){
+ 2471               	.LM248:
+ 2472 0d12 E4E0      		ldi r30,lo8(4)
+ 2473 0d14 E90F      		add r30,r25
+ 2474 0d16 B0E0      		ldi r27,0
+ 2475 0d18 A050      		subi r26,lo8(-(buffer))
+ 2476 0d1a B040      		sbci r27,hi8(-(buffer))
+ 2477 0d1c 9C91      		ld r25,X
+ 2478 0d1e 9C83      		std Y+4,r25
+  67:serialparser.c ****            i = 5;
+ 2480               	.LM249:
+ 2481 0d20 8E17      		cp r24,r30
+ 2482 0d22 01F0      		breq .L77
+  66:serialparser.c ****         if (start == stop){
+ 2484               	.LM250:
+ 2485 0d24 F0E0      		ldi r31,0
+ 2486 0d26 E050      		subi r30,lo8(-(buffer))
+ 2487 0d28 F040      		sbci r31,hi8(-(buffer))
+ 2488 0d2a 8081      		ld r24,Z
+ 2489 0d2c 8D83      		std Y+5,r24
+ 2490               	.L77:
+ 2491               	.LBE200:
+  71:serialparser.c **** }
+ 2493               	.LM251:
+ 2494 0d2e C501      		movw r24,r10
+ 2495 0d30 0E94 0000 		call atoi
+ 2496               	.LBE199:
+ 2497               	.LBE198:
+ 161:serialparser.c ****                         succ = findParameter(':', ':', '\n', 20, &start, &stop);
+ 2499               	.LM252:
+ 2500 0d34 0E94 0000 		call setAngleMotorLength
+ 2501 0d38 982E      		mov r9,r24
+ 2502 0d3a 24E1      		ldi r18,lo8(20)
+ 2503 0d3c 00C0      		rjmp .L81
+ 2504               	.L376:
+ 2505               	.LBB201:
+ 2506               	.LBB202:
+  96:serialparser.c ****         ring_read++;
+ 2508               	.LM253:
+ 2509 0d3e 9091 0000 		lds r25,ring_read
+ 2510 0d42 8091 0000 		lds r24,ring_write
+ 2511 0d46 9817      		cp r25,r24
+ 2512 0d48 01F0      		breq .L82
+  97:serialparser.c ****         maxlength --;
+ 2514               	.LM254:
+ 2515 0d4a 8091 0000 		lds r24,ring_read
+ 2516 0d4e 8F5F      		subi r24,lo8(-(1))
+ 2517 0d50 8093 0000 		sts ring_read,r24
+ 2518 0d54 2150      		subi r18,lo8(-(-1))
+  99:serialparser.c ****             return ERROR_MAX_LENGTH;
+ 2520               	.LM255:
+ 2521 0d56 01F4      		brne .+2
+ 2522 0d58 00C0      		rjmp .L313
+ 2523               	.L81:
+  96:serialparser.c ****         ring_read++;
+ 2525               	.LM256:
+ 2526 0d5a E091 0000 		lds r30,ring_read
+ 2527 0d5e F0E0      		ldi r31,0
+ 2528 0d60 E050      		subi r30,lo8(-(buffer))
+ 2529 0d62 F040      		sbci r31,hi8(-(buffer))
+ 2530 0d64 8081      		ld r24,Z
+ 2531 0d66 8A33      		cpi r24,lo8(58)
+ 2532 0d68 01F4      		brne .L376
+ 2533               	.L82:
+ 103:serialparser.c ****         return ERROR_CANNOT_FIND;
+ 2535               	.LM257:
+ 2536 0d6a 9091 0000 		lds r25,ring_read
+ 2537 0d6e 8091 0000 		lds r24,ring_write
+ 2538 0d72 9817      		cp r25,r24
+ 2539 0d74 01F4      		brne .+2
+ 2540 0d76 00C0      		rjmp .L313
+ 2541               	.LBB203:
+ 2542               	.LBB204:
+ 107:serialparser.c **** 
+ 2544               	.LM258:
+ 2545 0d78 8091 0000 		lds r24,ring_read
+ 2546 0d7c 8F5F      		subi r24,lo8(-(1))
+ 2547 0d7e 8093 0000 		sts ring_read,r24
+ 110:serialparser.c ****     while(buffer[ring_read] != stopchar && buffer[ring_read] != secondstopchar){ //Find next delimi
+ 2549               	.LM259:
+ 2550 0d82 9091 0000 		lds r25,ring_read
+ 2551 0d86 00C0      		rjmp .L311
+ 2552               	.L338:
+ 111:serialparser.c ****         ring_read++; //Step forward
+ 2554               	.LM260:
+ 2555 0d88 E091 0000 		lds r30,ring_read
+ 2556 0d8c F0E0      		ldi r31,0
+ 2557 0d8e E050      		subi r30,lo8(-(buffer))
+ 2558 0d90 F040      		sbci r31,hi8(-(buffer))
+ 2559 0d92 8081      		ld r24,Z
+ 2560 0d94 8A30      		cpi r24,lo8(10)
+ 2561 0d96 01F0      		breq .L87
+ 112:serialparser.c ****     }
+ 2563               	.LM261:
+ 2564 0d98 8091 0000 		lds r24,ring_read
+ 2565 0d9c 8F5F      		subi r24,lo8(-(1))
+ 2566 0d9e 8093 0000 		sts ring_read,r24
+ 2567               	.L311:
+ 111:serialparser.c ****         ring_read++; //Step forward
+ 2569               	.LM262:
+ 2570 0da2 E091 0000 		lds r30,ring_read
+ 2571 0da6 F0E0      		ldi r31,0
+ 2572 0da8 E050      		subi r30,lo8(-(buffer))
+ 2573 0daa F040      		sbci r31,hi8(-(buffer))
+ 2574 0dac 8081      		ld r24,Z
+ 2575 0dae 8A33      		cpi r24,lo8(58)
+ 2576 0db0 01F4      		brne .L338
+ 2577               	.L87:
+ 114:serialparser.c ****     
+ 2579               	.LM263:
+ 2580 0db2 8091 0000 		lds r24,ring_read
+ 2581               	.LBE204:
+ 2582               	.LBE203:
+ 2583               	.LBE202:
+ 2584               	.LBE201:
+ 2585               	.LBB205:
+ 2586               	.LBB194:
+ 2587               	.LBB195:
+  62:serialparser.c ****     
+ 2589               	.LM264:
+ 2590 0db6 25E0      		ldi r18,lo8(5)
+ 2591 0db8 F501      		movw r30,r10
+ 2592               		0:
+ 2593 0dba 1192      		st Z+,__zero_reg__
+ 2594 0dbc 2A95      		dec r18
+ 2595 0dbe 01F4      		brne 0b
+ 2596               	.LBB196:
+  66:serialparser.c ****         if (start == stop){
+ 2598               	.LM265:
+ 2599 0dc0 A1E0      		ldi r26,lo8(1)
+ 2600 0dc2 A90F      		add r26,r25
+ 2601 0dc4 E92F      		mov r30,r25
+ 2602 0dc6 F0E0      		ldi r31,0
+ 2603 0dc8 E050      		subi r30,lo8(-(buffer))
+ 2604 0dca F040      		sbci r31,hi8(-(buffer))
+ 2605 0dcc 2081      		ld r18,Z
+ 2606 0dce 2983      		std Y+1,r18
+  67:serialparser.c ****            i = 5;
+ 2608               	.LM266:
+ 2609 0dd0 8A17      		cp r24,r26
+ 2610 0dd2 01F0      		breq .L85
+  66:serialparser.c ****         if (start == stop){
+ 2612               	.LM267:
+ 2613 0dd4 E2E0      		ldi r30,lo8(2)
+ 2614 0dd6 E90F      		add r30,r25
+ 2615 0dd8 B0E0      		ldi r27,0
+ 2616 0dda A050      		subi r26,lo8(-(buffer))
+ 2617 0ddc B040      		sbci r27,hi8(-(buffer))
+ 2618 0dde 2C91      		ld r18,X
+ 2619 0de0 2A83      		std Y+2,r18
+  67:serialparser.c ****            i = 5;
+ 2621               	.LM268:
+ 2622 0de2 8E17      		cp r24,r30
+ 2623 0de4 01F0      		breq .L85
+  66:serialparser.c ****         if (start == stop){
+ 2625               	.LM269:
+ 2626 0de6 A3E0      		ldi r26,lo8(3)
+ 2627 0de8 A90F      		add r26,r25
+ 2628 0dea F0E0      		ldi r31,0
+ 2629 0dec E050      		subi r30,lo8(-(buffer))
+ 2630 0dee F040      		sbci r31,hi8(-(buffer))
+ 2631 0df0 2081      		ld r18,Z
+ 2632 0df2 2B83      		std Y+3,r18
+  67:serialparser.c ****            i = 5;
+ 2634               	.LM270:
+ 2635 0df4 8A17      		cp r24,r26
+ 2636 0df6 01F0      		breq .L85
+  66:serialparser.c ****         if (start == stop){
+ 2638               	.LM271:
+ 2639 0df8 E4E0      		ldi r30,lo8(4)
+ 2640 0dfa E90F      		add r30,r25
+ 2641 0dfc B0E0      		ldi r27,0
+ 2642 0dfe A050      		subi r26,lo8(-(buffer))
+ 2643 0e00 B040      		sbci r27,hi8(-(buffer))
+ 2644 0e02 9C91      		ld r25,X
+ 2645 0e04 9C83      		std Y+4,r25
+  67:serialparser.c ****            i = 5;
+ 2647               	.LM272:
+ 2648 0e06 8E17      		cp r24,r30
+ 2649 0e08 01F0      		breq .L85
+  66:serialparser.c ****         if (start == stop){
+ 2651               	.LM273:
+ 2652 0e0a F0E0      		ldi r31,0
+ 2653 0e0c E050      		subi r30,lo8(-(buffer))
+ 2654 0e0e F040      		sbci r31,hi8(-(buffer))
+ 2655 0e10 8081      		ld r24,Z
+ 2656 0e12 8D83      		std Y+5,r24
+ 2657               	.L85:
+ 2658               	.LBE196:
+  71:serialparser.c **** }
+ 2660               	.LM274:
+ 2661 0e14 C501      		movw r24,r10
+ 2662 0e16 0E94 0000 		call atoi
+ 2663               	.LBE195:
+ 2664               	.LBE194:
+ 164:serialparser.c ****                             if (asuccess == 0 && tsuccess == 0){
+ 2666               	.LM275:
+ 2667 0e1a 0E94 0000 		call setTiltMotorLength
+ 165:serialparser.c ****                                 fprintf_P(port, PSTR("OK\n"));
+ 2669               	.LM276:
+ 2670 0e1e 9110      		cpse r9,__zero_reg__
+ 2671 0e20 00C0      		rjmp .L60
+ 165:serialparser.c ****                                 fprintf_P(port, PSTR("OK\n"));
+ 2673               	.LM277:
+ 2674 0e22 8111      		cpse r24,__zero_reg__
+ 2675 0e24 00C0      		rjmp .L60
+ 166:serialparser.c ****                             }
+ 2677               	.LM278:
+ 2678 0e26 80E0      		ldi r24,lo8(__c.2516)
+ 2679 0e28 90E0      		ldi r25,hi8(__c.2516)
+ 2680 0e2a 00C0      		rjmp .L293
+ 2681               	.L361:
+ 2682               	.LBE205:
+ 2683               	.LBE211:
+ 2684               	.LBE216:
+ 2685               	.LBE234:
+ 2686               	.LBB235:
+ 215:serialparser.c ****             }
+ 2688               	.LM279:
+ 2689 0e2c 0E94 0000 		call getTiltMotorAVGcurrent
+ 2690 0e30 962E      		mov r9,r22
+ 2691 0e32 872E      		mov r8,r23
+ 2692 0e34 782E      		mov r7,r24
+ 2693 0e36 692E      		mov r6,r25
+ 2694 0e38 0E94 0000 		call getAngleMotorAVGcurrent
+ 2695 0e3c 6F92      		push r6
+ 2696 0e3e 7F92      		push r7
+ 2697 0e40 8F92      		push r8
+ 2698 0e42 9F92      		push r9
+ 2699 0e44 9F93      		push r25
+ 2700 0e46 8F93      		push r24
+ 2701 0e48 7F93      		push r23
+ 2702 0e4a 6F93      		push r22
+ 2703 0e4c A0E0      		ldi r26,lo8(.LC8)
+ 2704 0e4e B0E0      		ldi r27,hi8(.LC8)
+ 2705 0e50 00C0      		rjmp .L298
+ 2706               	.LBE235:
+ 2707               	.LBE237:
+ 2807               	.Lscope7:
+ 2809               	.global	__vector_18
+ 2811               	__vector_18:
+  31:serialparser.c **** 	volatile char temp = USART_Receive0();
+ 2813               	.LM280:
+ 2814               	.LFBB8:
+ 2815 0e52 1F92      		push r1
+ 2816 0e54 0F92      		push r0
+ 2817 0e56 0FB6      		in r0,__SREG__
+ 2818 0e58 0F92      		push r0
+ 2819 0e5a 1124      		clr __zero_reg__
+ 2820 0e5c 2F93      		push r18
+ 2821 0e5e 3F93      		push r19
+ 2822 0e60 4F93      		push r20
+ 2823 0e62 5F93      		push r21
+ 2824 0e64 6F93      		push r22
+ 2825 0e66 7F93      		push r23
+ 2826 0e68 8F93      		push r24
+ 2827 0e6a 9F93      		push r25
+ 2828 0e6c AF93      		push r26
+ 2829 0e6e BF93      		push r27
+ 2830 0e70 EF93      		push r30
+ 2831 0e72 FF93      		push r31
+ 2832 0e74 CF93      		push r28
+ 2833 0e76 DF93      		push r29
+ 2834 0e78 1F92      		push __zero_reg__
+ 2835 0e7a CDB7      		in r28,__SP_L__
+ 2836 0e7c DEB7      		in r29,__SP_H__
+ 2837               	/* prologue: Signal */
+ 2838               	/* frame size = 1 */
+ 2839               	/* stack size = 18 */
+ 2840               	.L__stack_usage = 18
+ 2841               	.L378:
+ 2842               	.LBB238:
+ 2843               	.LBB239:
+ 2845               	.Ltext1:
+   1:USART.h       **** #include <string.h>
+   2:USART.h       **** #include <stdio.h>	
+   3:USART.h       **** #include <util/delay.h>	
+   4:USART.h       **** #include <avr/io.h>	
+   5:USART.h       **** 
+   6:USART.h       **** #define USART_FREQ 16000000UL
+   7:USART.h       **** 
+   8:USART.h       **** __attribute__((always_inline)) inline static uint8_t USART_Receive0(void) {
+   9:USART.h       **** 	while ( !(UCSR0A & (1<<RXC0)) );
+ 2847               	.LM281:
+ 2848 0e7e 8091 C000 		lds r24,192
+ 2849 0e82 87FF      		sbrs r24,7
+ 2850 0e84 00C0      		rjmp .L378
+  10:USART.h       **** 	return UDR0;
+ 2852               	.LM282:
+ 2853 0e86 8091 C600 		lds r24,198
+ 2854               	.LBE239:
+ 2855               	.LBE238:
+ 2857               	.Ltext2:
+  32:serialparser.c **** 	buffer[ring_write++] = temp;
+ 2859               	.LM283:
+ 2860 0e8a 8983      		std Y+1,r24
+  33:serialparser.c **** 	if (temp == '\n' || temp == '\r'){
+ 2862               	.LM284:
+ 2863 0e8c E091 0000 		lds r30,ring_write
+ 2864 0e90 81E0      		ldi r24,lo8(1)
+ 2865 0e92 8E0F      		add r24,r30
+ 2866 0e94 8093 0000 		sts ring_write,r24
+ 2867 0e98 F0E0      		ldi r31,0
+ 2868 0e9a 8981      		ldd r24,Y+1
+ 2869 0e9c E050      		subi r30,lo8(-(buffer))
+ 2870 0e9e F040      		sbci r31,hi8(-(buffer))
+ 2871 0ea0 8083      		st Z,r24
+  34:serialparser.c ****         parseCommands();
+ 2873               	.LM285:
+ 2874 0ea2 8981      		ldd r24,Y+1
+ 2875 0ea4 8A30      		cpi r24,lo8(10)
+ 2876 0ea6 01F0      		breq .L379
+  34:serialparser.c ****         parseCommands();
+ 2878               	.LM286:
+ 2879 0ea8 8981      		ldd r24,Y+1
+ 2880 0eaa 8D30      		cpi r24,lo8(13)
+ 2881 0eac 01F0      		breq .L379
+ 2882               	.L377:
+ 2883               	/* epilogue start */
+  37:serialparser.c **** 
+ 2885               	.LM287:
+ 2886 0eae 0F90      		pop __tmp_reg__
+ 2887 0eb0 DF91      		pop r29
+ 2888 0eb2 CF91      		pop r28
+ 2889 0eb4 FF91      		pop r31
+ 2890 0eb6 EF91      		pop r30
+ 2891 0eb8 BF91      		pop r27
+ 2892 0eba AF91      		pop r26
+ 2893 0ebc 9F91      		pop r25
+ 2894 0ebe 8F91      		pop r24
+ 2895 0ec0 7F91      		pop r23
+ 2896 0ec2 6F91      		pop r22
+ 2897 0ec4 5F91      		pop r21
+ 2898 0ec6 4F91      		pop r20
+ 2899 0ec8 3F91      		pop r19
+ 2900 0eca 2F91      		pop r18
+ 2901 0ecc 0F90      		pop r0
+ 2902 0ece 0FBE      		out __SREG__,r0
+ 2903 0ed0 0F90      		pop r0
+ 2904 0ed2 1F90      		pop r1
+ 2905 0ed4 1895      		reti
+ 2906               	.L379:
+  35:serialparser.c **** 	}
+ 2908               	.LM288:
+ 2909 0ed6 0E94 0000 		call parseCommands
+ 2910 0eda 00C0      		rjmp .L377
+ 2915               	.Lscope8:
+ 2916               		.section	.progmem.data,"a",@progbits
+ 2919               	__c.2518:
+ 2920 0000 4D41 4E0A 		.string	"MAN\n"
+ 2920      00
+ 2923               	__c.2516:
+ 2924 0005 4F4B 0A00 		.string	"OK\n"
+ 2927               	__c.2511:
+ 2928 0009 4D41 4E0A 		.string	"MAN\n"
+ 2928      00
+ 2931               	__c.2509:
+ 2932 000e 4F4B 0A00 		.string	"OK\n"
+ 2935               	__c.2498:
+ 2936 0012 4552 520A 		.string	"ERR\n"
+ 2936      00
+ 2937               		.comm	port,2,1
+ 2938               		.comm	buffer,256,1
+ 2939               	.global	ring_read
+ 2940               		.section .bss
+ 2943               	ring_read:
+ 2944 0000 00        		.zero	1
+ 2945               	.global	ring_write
+ 2948               	ring_write:
+ 2949 0001 00        		.zero	1
+ 2954               		.text
+ 2956               	.Letext0:
+ 2957               		.ident	"GCC: (GNU) 4.9.2"
+ 2958               	.global __do_copy_data
+ 2959               	.global __do_clear_bss
+DEFINED SYMBOLS
+                            *ABS*:00000000 serialparser.c
+     /tmp/ccW73tEw.s:2      *ABS*:0000003e __SP_H__
+     /tmp/ccW73tEw.s:3      *ABS*:0000003d __SP_L__
+     /tmp/ccW73tEw.s:4      *ABS*:0000003f __SREG__
+     /tmp/ccW73tEw.s:5      *ABS*:00000000 __tmp_reg__
+     /tmp/ccW73tEw.s:6      *ABS*:00000001 __zero_reg__
+     /tmp/ccW73tEw.s:129    .text:00000000 read_until_line_end
+     /tmp/ccW73tEw.s:2943   .bss:00000000 ring_read
+                            *COM*:00000100 buffer
+     /tmp/ccW73tEw.s:2948   .bss:00000001 ring_write
+     /tmp/ccW73tEw.s:172    .text:0000003a initSerialParser
+                            *COM*:00000002 port
+     /tmp/ccW73tEw.s:210    .text:00000054 readInt16
+     /tmp/ccW73tEw.s:320    .text:000000d6 readFloat
+     /tmp/ccW73tEw.s:507    .text:000001c2 findParameter
+     /tmp/ccW73tEw.s:641    .text:0000026c printerr
+     /tmp/ccW73tEw.s:2935   .progmem.data:00000012 __c.2498
+     /tmp/ccW73tEw.s:704    .text:0000028e parseCommands
+     /tmp/ccW73tEw.s:2927   .progmem.data:00000009 __c.2511
+     /tmp/ccW73tEw.s:2919   .progmem.data:00000000 __c.2518
+     /tmp/ccW73tEw.s:2931   .progmem.data:0000000e __c.2509
+     /tmp/ccW73tEw.s:2923   .progmem.data:00000005 __c.2516
+     /tmp/ccW73tEw.s:2811   .text:00000e52 __vector_18
+
+UNDEFINED SYMBOLS
+__prologue_saves__
+atoi
+__epilogue_restores__
+atof
+fprintf_P
+getTiltMotorStatus
+getAngleMotorStatus
+fprintf
+readAutoManualState
+GetVoltage
+getSetTilt
+getSetAngle
+GetOverSampledVoltage
+fputc
+getTilt
+getAngle
+getTiltMotorMoveSpeed
+getAngleMotorMoveSpeed
+getTiltActuatorCurrentLength
+getAngleActuatorCurrentLength
+readTurnButtonState
+readTiltButtonState
+getTiltMoveLength
+getAngleMoveLength
+getTiltMotorMaxAngle
+getAngleMotorMaxAngle
+getTiltMotorMinAngle
+getAngleMotorMinAngle
+setAngle
+setTilt
+getTiltActuatorSetLength
+getAngleActuatorSetLength
+setAngleMotorLength
+setTiltMotorLength
+getTiltMotorAVGcurrent
+getAngleMotorAVGcurrent
+__do_copy_data
+__do_clear_bss
