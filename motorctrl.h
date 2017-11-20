@@ -93,7 +93,7 @@ typedef struct{
     uint16_t voltage_high_offset; 
     uint16_t voltage_range;
     uint16_t (*angle_to_length)(float angle);
-    uint16_t avg_move_current;
+    float avg_move_current;
     float move_speed_mm;
     uint16_t move_length_mm;
 } motor;
@@ -113,14 +113,14 @@ uint16_t getAngleActuatorCurrentLength(void);
 motor_status getAngleMotorStatus(void);
 motor_status getTiltMotorStatus(void);
 motor_status motorController(void);
-uint16_t getTiltMotorAVGcurrent(void);
-uint16_t getAngleMotorAVGcurrent(void);
+float getTiltMotorAVGcurrent(void);
+float getAngleMotorAVGcurrent(void);
 float getTiltMotorMoveSpeed(void);
 float getAngleMotorMoveSpeed(void);
 uint16_t getTiltMoveLength(void);
 uint16_t getAngleMoveLength(void);
 
-uint16_t getMotorAVGcurrent(volatile motor *m);
+float getMotorAVGcurrent(volatile motor *m);
 float getMotorMoveSpeed(volatile motor *m);
 uint16_t getMotorMoveLength(volatile motor *m);
 

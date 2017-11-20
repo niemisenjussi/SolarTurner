@@ -26,9 +26,9 @@
 
 //SET limits for the API
 #define MIN_ANGLE 105.0
-#define ANGLE_RANGE 120.0
+#define ANGLE_RANGE 123.0
 #define MIN_TILT 8.5
-#define TILT_RANGE 60.0
+#define TILT_RANGE 85.0
 
 #define ANGLE_REFERENCE 165.0 //heading by default South
 #define TILT_REFERENCE 0.0   //Tilted 5 degrees upward frow vertical angle
@@ -49,12 +49,12 @@
 #define ACTUATOR_A_MIN_LENGTH 515L //absolute value
 #define ACTUATOR_A_MAX_LENGTH 890L //absolute value
 #define ACTUATOR_A_MIN_LIMIT  540L//Minimum limit where actuator can go
-#define ACTUATOR_A_MAX_LIMIT  860L //Maximum limit where actuator can go
+#define ACTUATOR_A_MAX_LIMIT  870L //Maximum limit where actuator can go
 
 #define ACTUATOR_B_MIN_LENGTH 340L  //375 515-890               //pidempi
 #define ACTUATOR_B_MAX_LENGTH 540L  //200 340-540 pisimmällään  //lyhyempi
 #define ACTUATOR_B_MIN_LIMIT  375L
-#define ACTUATOR_B_MAX_LIMIT  500L
+#define ACTUATOR_B_MAX_LIMIT  540L
 
 #define VREF 4.7 //Reference voltage which is used for actuators
 #define ACTUATOR_A_LOW_OFFSET 0.93
@@ -129,7 +129,7 @@ volatile motor motors[] = {
          (ADC_BITS*ANGLE_ACTUATOR_HIGH_OFFSET)/VREF, //806,12
          ((ADC_BITS*ANGLE_ACTUATOR_HIGH_OFFSET)/VREF) - ((ADC_BITS*ANGLE_ACTUATOR_LOW_OFFSET)/VREF),
          &angleDegToLength,
-         0, //Motor current
+         0.0, //Motor current
          0.0, //motor speed
          0 //move length
     },
@@ -165,7 +165,7 @@ volatile motor motors[] = {
          (ADC_BITS*TILT_ACTUATOR_HIGH_OFFSET)/VREF, //668,9
          ((ADC_BITS*TILT_ACTUATOR_HIGH_OFFSET)/VREF) - ((ADC_BITS*TILT_ACTUATOR_LOW_OFFSET)/VREF),
          &tiltDegToLength,
-         0,
+         0.0,
          0.0,
          0
     }};
@@ -259,11 +259,11 @@ motor_status getTiltMotorStatus(void){
     return motors[TILT_MOTOR].status;
 }
 
-uint16_t getTiltMotorAVGcurrent(void){
+float getTiltMotorAVGcurrent(void){
     return getMotorAVGcurrent(&motors[TILT_MOTOR]);
 }
 
-uint16_t getAngleMotorAVGcurrent(void){
+float getAngleMotorAVGcurrent(void){
     return getMotorAVGcurrent(&motors[ANGLE_MOTOR]);
 }
 
@@ -283,7 +283,7 @@ uint16_t getAngleMoveLength(void){
     return getMotorMoveLength(&motors[ANGLE_MOTOR]);
 }
 
-uint16_t getMotorAVGcurrent(volatile motor *m){
+float getMotorAVGcurrent(volatile motor *m){
     return m->avg_move_current;
 }
 
@@ -318,7 +318,7 @@ float getMotorSetPosition(volatile motor *m){
 
 void measureActuatorCurrent(volatile motor *m){
     uint16_t voltage = AVGVoltage(m->actuator_current_adc_channel, 0x40, 2);
-    m->avg_move_current = (m->avg_move_current + voltage) / 2;    
+    m->avg_move_current = (m->avg_move_current*9.0 + voltage) / 10.0; //one sample is effecting 1/5    
 }
 
 
@@ -507,7 +507,7 @@ void setLengthLoop(void){
                     m->timeout_value ++; //update timeout variables
                     m->status = RUNNING_BACKWARD;
                     running_motor = i;
-                    if (m->timeout_value%1000 == 0){
+                    if (m->timeout_value%100 == 0){
                         measureActuatorCurrent(m);
                     }
                 }
@@ -516,11 +516,12 @@ void setLengthLoop(void){
                     m->timeout_value ++; //update timeout variables
                     m->status = RUNNING_FORWARD;
                     running_motor = i;
-                    if (m->timeout_value%1000 == 0){
+                    if (m->timeout_value%100 == 0){
                         measureActuatorCurrent(m);
                     }
                 }
                 else{
+                    measureActuatorCurrent(m);
                     for(; m->current_pwm > 0; m->current_pwm--){
                         setMotor(m, m->current_dir, m->current_pwm);
                         delayLoop_us(m->deacceleration_time);
@@ -529,7 +530,7 @@ void setLengthLoop(void){
                     m->status = STATUS_OK;
                     disableMotorPWM(m);
                     calculateMoveSpeed(m, systick);       
-                    _delay_ms(25);       
+                    _delay_ms(25);  
                     running_motor = -1;    
                     systick = 0;
                 }

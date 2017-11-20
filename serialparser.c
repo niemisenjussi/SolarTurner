@@ -212,7 +212,7 @@ void parseCommands(void){
                 fprintf(port, "G8:%d:%d\n",getAngleActuatorSetLength(), getTiltActuatorSetLength());
             }
             else if (value == '9'){
-                fprintf(port, "G9:%d:%d\n", getAngleMotorAVGcurrent(), getTiltMotorAVGcurrent());
+                fprintf(port, "G9:%5.2f:%5.2f\n", getAngleMotorAVGcurrent(), getTiltMotorAVGcurrent());
             }
             else if (value == 'A'){
                 fprintf(port, "GA:%5.2f:%5.2f\n", getAngleMotorMoveSpeed(), getTiltMotorMoveSpeed());
